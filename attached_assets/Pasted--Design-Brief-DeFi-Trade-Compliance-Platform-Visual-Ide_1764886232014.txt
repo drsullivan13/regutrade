@@ -1,0 +1,793 @@
+# Design Brief: DeFi Trade Compliance Platform
+## Visual Identity & User Experience
+
+---
+
+## Design Philosophy
+
+You're designing for institutional finance professionals who exist at the intersection of two worlds: the precision of traditional finance and the innovation of decentralized technology. This isn't consumer crypto. This isn't retail trading. This is compliance officers, hedge fund traders, and RIA portfolio managers who need to **prove** their decisions to regulators.
+
+**Core Design Principle:** *Trust through transparency. Sophistication through simplicity.*
+
+The interface should feel like it was designed by someone who understands Bloomberg Terminal but isn't afraid to leave the 1990s behind. Clean, modern, data-dense where it matters, but never overwhelming. Every element should justify its existence.
+
+---
+
+## Emotional Tone & User Psychology
+
+### What Users Should Feel:
+
+**On First Impression:**  
+"This is serious. This is professional. This understands my world."
+
+**During Analysis:**  
+"I can see everything clearly. I understand the tradeoffs. I'm making an informed decision."
+
+**After Execution:**  
+"I have proof. I have documentation. I can show my compliance officer with confidence."
+
+**Overall Sensation:**  
+The quiet confidence of having the right tool for a complex job. Like a surgeon's scalpel, a pilot's HUD, or an architect's blueprint—precision instruments that inspire trust through their clarity.
+
+---
+
+## Visual Language
+
+### Color Philosophy
+
+**Primary Palette: Financial Trust**
+- **Indigo/Royal Blue (Primary):** Authority, stability, intelligence. This is your action color—buttons, links, highlights. Think Morgan Stanley blue meets modern SaaS. Not the garish electric blue of consumer crypto, but the refined blue of institutional trust.
+- **Slate Gray (Neutral):** The workhorse color. Backgrounds, secondary text, borders. Should feel like brushed aluminum or high-end office furniture. Never flat black (too harsh), never pure white (too stark).
+- **Forest Green (Success):** When execution goes well, this should feel like a checkmark on an audit report. Subtle. Professional. Never neon.
+- **Amber (Warning):** For acceptable but suboptimal execution. The color of caution lights and yellow legal pads—attention without alarm.
+- **Crimson (Alert):** Rarely used. Only for genuine problems. When you see red, something needs immediate attention.
+
+**Why No Dark Mode (Yet):**  
+Compliance officers work in offices with overhead lighting, not gaming setups with RGB. Documents get printed. Screens get photographed for presentations. A light, clean interface photographs well and translates to paper. Dark mode can come in v2.
+
+### Typography Hierarchy
+
+**Headings:**  
+Strong, authoritative sans-serif. Medium weight (not bold—we're confident, not shouting). Generous spacing between heading and content. Think "Federal Reserve press release" not "crypto startup blog."
+
+**Body Text:**  
+Highly legible. 16px minimum for primary content (never make finance professionals squint). Line height generous enough for scanning (1.6-1.7). Letter spacing slightly increased for maximum clarity.
+
+**Data/Numbers:**  
+Tabular numerals (numbers align vertically). Slightly heavier weight than body text—numbers are the heroes here. Monospace for addresses and transaction hashes to show they're technical identifiers.
+
+**Microcopy:**  
+Lighter weight, slightly smaller, but never cryptic. Every helper text should reduce anxiety, not create it.
+
+---
+
+## Layout & Information Architecture
+
+### The Grid System
+
+Work in **8-point grid.** Everything snaps to multiples of 8. This creates visual rhythm and makes the interface feel intentional, not arbitrary.
+
+**Spacing Scale:**
+- 8px: Tight relationships (icon to label)
+- 16px: Related elements (form fields, list items)
+- 24px: Section breathing room (between cards)
+- 32px: Major section breaks
+- 48px: Page-level separation
+
+### White Space as a Design Element
+
+Information density is good. Visual clutter is not. The difference is intentional white space.
+
+**Key Principle:** Give important information room to breathe. A single number in space is more powerful than ten numbers crammed together. The recommended route should feel like it's been elevated, given importance through spacing and containment.
+
+---
+
+## Page-by-Page Design Intent
+
+### Page 1: Analysis & Execution
+
+**Overall Feel:** Control center. Everything you need to make a decision is here, organized logically.
+
+**Hero Section: Trade Input**
+- Clean, spacious form at the top
+- Dropdown for token pairs should feel substantial—not a tiny default select
+- Amount input should be large enough to inspire confidence in data entry
+- Visual weight: 25% of viewport height
+- Card-style container with subtle shadow (lifted 2px off background)
+- Button: Primary color, full-width, substantial padding (56px height)
+- When clicked, button should give tactile feedback (press down 1px, darken slightly)
+
+**Route Comparison Table**
+- This is the heart of the interface—give it the space it deserves
+- Visual weight: 40% of viewport height
+- **Row Design:** Each route is a contained unit
+  - Recommended route: Subtle green background tint (5-10% opacity), left border accent (4px solid green)
+  - Other routes: Clean white, subtle bottom border only
+  - On hover: Slight background tint (gray-50 equivalent), cursor changes to indicate interactivity
+  
+- **Column Design:**
+  - Route name: Bold, larger (18px)
+  - Numbers: Tabular alignment, clear hierarchy
+  - The "Best?" column: Simple checkmark in a circle for recommended route, empty for others
+  - Execute buttons: Right-aligned, consistent width, primary color for recommended, outline style for alternatives
+
+- **Table Headers:**
+  - Sticky when scrolling (should it get that tall)
+  - Slightly smaller uppercase text with letter spacing
+  - Subtle background differentiation from rows
+  - Optional tooltip icons for metrics that might need explanation
+
+**Recommendation Panel**
+- Appears below table
+- Left border accent in primary blue (6px)
+- Light blue background tint
+- Icon: Checkmark or shield (trust symbol)
+- Typography: Statement should be bold and clear
+- Rationale in normal weight below
+- This should feel like a stamp of approval
+
+**Execution Modal/Panel**
+- Slides in or appears as overlay
+- Darker background overlay (reduce visual noise from rest of page)
+- Clean white modal centered
+- **Progression Visualization:**
+  - Vertical timeline on left showing steps
+  - Each step has icon, label, status indicator
+  - Active step pulses gently
+  - Completed steps show checkmark
+  - Pending steps are grayed out
+  
+**Status States:**
+- Connecting wallet: Spinner with "Connecting..." text
+- Approval needed: Warning icon with clear CTA
+- Approving: Progress indicator
+- Executing: Animated state showing transaction is happening
+- Confirmed: Success state with confetti micro-interaction (subtle!)
+- Failed: Clear error message with suggested next steps
+
+### Page 2: Post-Trade Analysis
+
+**Feel:** Report card. Confirmation. Proof.
+
+**Layout:**
+- Two-column comparison (60/40 split)
+- Left column: What was predicted
+- Right column: What actually happened
+- Visual connector between predicted and actual (subtle line or arrow)
+
+**Quality Score:**
+- Large, prominent number (72px)
+- Percentage in circle with color-coded ring
+  - 99%+: Full green ring
+  - 97-99%: Partial green ring
+  - 95-97%: Amber ring
+  - <95%: Red ring
+- Label below: "Excellent" / "Good" / "Acceptable" / "Review Required"
+
+**The Comparison:**
+- Side by side cards
+- Equal visual weight
+- Predicted: Slightly muted colors (this is in the past)
+- Actual: Full saturation (this is what really happened)
+- Variance shown with delta indicators (▲ green if better, ▼ amber if worse)
+
+**Transaction Link:**
+- Monospace font for hash
+- External link icon
+- Opens block explorer in new tab
+- Should feel like a citation—this is proof
+
+**Compliance Statement:**
+- Bottom section
+- Full width
+- Light gray background
+- Professional language
+- Download/Export button prominent
+
+### Page 3: Trade History
+
+**Feel:** Archive. Ledger. Permanent record.
+
+**Table Design:**
+- Alternating row colors (very subtle—just enough to guide the eye)
+- Compact but readable rows
+- Sortable columns with clear indicators
+- Execution quality shown as colored badge/pill
+  - Green: Excellent
+  - Blue: Good  
+  - Amber: Acceptable
+  - Red: Review
+
+**Interaction:**
+- Click entire row to view details (not just a button)
+- Hover state shows it's clickable
+- Selected row remains highlighted when detail view opens
+
+**Filters:**
+- Top of page, horizontal layout
+- Date range picker (calendar icon, clean modal)
+- Token pair filter (dropdown)
+- Quality filter (checkbox group or multi-select)
+- Applied filters shown as dismissible pills
+
+**Empty State:**
+- Center aligned
+- Illustration or icon
+- Clear message: "No trades yet"
+- CTA button to start first trade
+- Should feel encouraging, not punishing
+
+### Page 4: Compliance Report Detail
+
+**Feel:** Official document. Printable. Auditor-ready.
+
+**Layout:**
+- Single column, centered (max-width: 800px)
+- Generous margins (feels like a document page)
+- Clear section headers with divider lines
+- Every section clearly labeled
+
+**Header:**
+- Report title bold and large
+- Trade ID in monospace below
+- Timestamp in gray
+- Wallet address truncated but full shown on hover
+
+**Sections:**
+- Trade Summary: The facts
+- Pre-Trade Analysis: What was known
+- Execution Details: What happened
+- Quality Metrics: How well it went
+- Compliance Statement: The conclusion
+
+**Download Button:**
+- Sticky at bottom of viewport or floating
+- Always accessible while scrolling
+- PDF icon + "Download Report"
+- Secondary action: "Export JSON" for programmatic access
+
+**Print Styling:**
+- Remove navigation when printed
+- Ensure black text on white background
+- Page breaks at logical points
+- Headers on each page
+
+---
+
+## Navigation & Information Architecture
+
+### Top Navigation Bar
+
+**Left Side:**
+- Logo/Product name (linked to home)
+- Badge showing network (Base L2 with logo)
+
+**Right Side:**
+- Wallet connection status
+  - Not connected: "Connect Wallet" button (primary color)
+  - Connected: Address badge (pill shape, click to view details/disconnect)
+- Balance indicator (shows USDC balance)
+
+**Secondary Nav:**
+- Tab-style navigation below header
+- [Analyze Trade] [Trade History]
+- Active tab indicated by bottom border (4px, primary color)
+- Inactive tabs darken slightly on hover
+
+### Responsive Behavior
+
+**Desktop First (1440px):**
+- Full table layouts
+- Side-by-side comparisons
+- Maximum information density
+
+**Tablet (768px-1024px):**
+- Tables remain but columns may shrink or stack
+- Modals take more screen real estate
+- Navigation may condense slightly
+
+**Mobile (< 768px):**
+- Tables become card stacks
+- Horizontal scrolling for wide data
+- Bottom navigation sheet for actions
+- Wallet connection simplified
+
+---
+
+## Micro-interactions & Animation
+
+**Philosophy:** Animation should explain, not decorate.
+
+### Button Presses
+- Subtle scale down (0.98x) on active
+- Shadow reduction to show "press"
+- Color darkens slightly
+- 150ms duration
+
+### Loading States
+- Skeleton screens where content will appear
+- Spinners for actions (not page loads)
+- Progress bars for known-duration tasks
+- Pulse animation for awaiting external input (wallet)
+
+### Success Feedback
+- Checkmark appears with slight bounce
+- Background flashes green tint momentarily (200ms)
+- Optional: Subtle confetti burst (very restrained!)
+
+### Route Comparison
+- Rows fade in sequentially (100ms stagger)
+- Recommended route slides in from left slightly
+- Numbers count up if showing deltas
+
+### Transaction Confirmation
+- Circle fills as confirmation blocks pass
+- Final confirmation: Scale up briefly, then settle
+
+### Hover States
+- 200ms transition on background color changes
+- Cursor changes to pointer for interactive elements
+- Scale transforms (1.02x) for cards that open details
+- Border color transitions for input focus
+
+**Golden Rule:** Every animation should complete in under 300ms. Users should never wait for UI flourish.
+
+---
+
+## Data Visualization
+
+### Numbers & Metrics
+
+**Large Numbers (Output Amounts):**
+- 24-32px size
+- Tabular numerals
+- Clear denomination label
+- Decimal places consistent (4 for crypto, 2 for USD)
+
+**Small Numbers (Gas, percentages):**
+- 14-16px size
+- Gray color (supporting information)
+- Units attached (%, $)
+
+**Deltas & Comparisons:**
+- Green up arrow (▲) for improvements
+- Red down arrow (▼) for decrements
+- Gray horizontal (→) for no change
+- Show absolute and percentage change
+
+### Execution Quality Visualization
+
+**Circular Progress:**
+- 200px diameter circle
+- Stroke width: 12px
+- Background stroke: light gray
+- Foreground stroke: color coded
+- Center: Large percentage number
+- Below: Rating label
+
+**Alternative: Linear Bar:**
+- Full width of container
+- Gradient from red → amber → green
+- Marker shows actual execution point
+- Predicted execution shown as dotted line
+
+---
+
+## Trust Signals & Professionalism
+
+### What Makes This Feel "Institutional"
+
+**Typography:**
+- Never playful or quirky
+- Numbers are the hero—make them stand out
+- Clear hierarchy—users shouldn't have to hunt for information
+
+**Color Use:**
+- Conservative palette
+- Color conveys meaning, not decoration
+- Status colors are universal (green=good, red=problem)
+
+**Spacing:**
+- Generous white space conveys "we have nothing to hide"
+- Cramped layouts convey desperation
+- This interface has confidence—it takes its time
+
+**Language:**
+- Professional but not stuffy
+- Clear but not simplistic  
+- "Trade executed successfully" not "Woohoo! You did it! 🎉"
+- "Execution quality: 99.48%" not "Pretty good!"
+
+**Proof Elements:**
+- Transaction hashes (link to block explorer)
+- Timestamps (precise to the second)
+- Wallet addresses (full, not truncated in reports)
+- Compliance statements (formal language)
+
+---
+
+## Accessibility & Inclusive Design
+
+**Color Blindness:**
+- Never rely on color alone
+- Use icons + text labels
+- Red/green distinction supported by symbols (✓ and ⚠)
+
+**Keyboard Navigation:**
+- Tab order logical
+- Focus states clearly visible (2px outline, primary color)
+- All actions accessible via keyboard
+- Modal trap focus when open
+
+**Screen Readers:**
+- Semantic HTML
+- Labels on all inputs
+- Status updates announced
+- Table headers properly associated
+
+**Contrast:**
+- WCAG AA minimum (4.5:1 for body text)
+- AAA preferred for primary content (7:1)
+- Never gray text on light gray background
+
+---
+
+## States & Feedback
+
+### Loading States
+
+**Skeleton Screens:**
+- Gray rectangles where content will appear
+- Pulse animation (subtle)
+- Correct aspect ratios for final content
+- Appears immediately (no delay)
+
+**Spinners:**
+- Use sparingly (only for actions, not page loads)
+- Centered in container
+- Size proportional to container
+- Optional: Progress percentage if known
+
+### Error States
+
+**Inline Validation:**
+- Red border on input with error
+- Error message appears below input
+- Icon (⚠) before error text
+- Appears immediately on blur, not on keystroke
+
+**Page-Level Errors:**
+- Banner at top of page
+- Red/amber background
+- Clear description of problem
+- Suggested action if available
+- Dismissible but persistent until resolved
+
+**Transaction Failures:**
+- Modal remains open
+- Error clearly stated
+- Link to troubleshooting if complex
+- "Try Again" button prominent
+- "Cancel" option available
+
+### Success States
+
+**Subtle Confirmation:**
+- Checkmark icon
+- Brief message
+- Green accent
+- Auto-dismiss after 3 seconds OR
+- Persistent with manual dismiss for important actions
+
+**Major Success (Trade Executed):**
+- Full-screen takeover briefly
+- Large checkmark or celebration icon
+- Key metrics displayed
+- CTA to view details
+- Auto-transition to post-trade analysis after 2 seconds
+
+---
+
+## Design System Components
+
+### Buttons
+
+**Primary Action:**
+- Background: Primary color (blue)
+- Text: White
+- Padding: 16px 32px
+- Border radius: 8px
+- Shadow: 2px
+- Hover: Darken 10%
+- Active: Press down visual
+- Disabled: Gray, 50% opacity
+
+**Secondary Action:**
+- Background: White
+- Text: Gray-700
+- Border: 1px solid gray-300
+- Same padding/radius as primary
+- Hover: Gray-50 background
+- Active: Gray-100 background
+
+**Tertiary/Text Button:**
+- No background
+- Text: Primary color
+- Underline on hover
+- Used for less important actions
+
+### Cards
+
+**Standard Card:**
+- Background: White
+- Border: 1px solid gray-200
+- Border radius: 12px
+- Shadow: 0 2px 8px rgba(0,0,0,0.08)
+- Padding: 24px
+- Hover: Shadow increases slightly
+
+**Highlighted Card (Recommended Route):**
+- Left border: 4px solid green
+- Background: Green tint (5% opacity)
+- Slightly larger shadow
+
+### Inputs
+
+**Text Input:**
+- Height: 48px
+- Border: 1px solid gray-300
+- Border radius: 8px
+- Padding: 12px 16px
+- Focus: Border → primary color, 2px
+- Error: Border → red
+- Disabled: Background gray-100
+
+**Dropdown/Select:**
+- Same styling as text input
+- Chevron icon on right
+- Dropdown menu: White, shadow, max-height with scroll
+- Options: Padding 12px, hover background gray-50
+
+### Tables
+
+**Desktop Table:**
+- Header: Background gray-50, sticky
+- Rows: White, 1px border bottom
+- Alternating rows: Optional subtle background
+- Hover: Background gray-50
+- Cell padding: 16px 24px
+- First/last column: Extra padding for breathing room
+
+**Mobile Cards (< 768px):**
+- Each row becomes a card
+- Key fields prominently displayed
+- Secondary fields shown below or hidden
+- Tap to expand full details
+
+---
+
+## Copywriting & Tone
+
+### Voice Principles
+
+**Clear, Not Clever:**
+- "Trade executed successfully" (yes)
+- "Ka-ching! You're all set!" (no)
+
+**Informative, Not Instructional:**
+- "Connecting to Base network" (yes)
+- "Please wait while we connect to Base network" (no—UI already shows progress)
+
+**Confident, Not Boastful:**
+- "Execution quality: 99.48%" (yes)
+- "Amazing! Nearly perfect execution!" (no)
+
+### Button Labels
+
+**Action-Oriented:**
+- "Analyze Trade" not "Submit"
+- "Execute Trade" not "Confirm"
+- "View Report" not "Details"
+- "Download PDF" not "Export"
+
+**Status Updates:**
+- "Analyzing routes..." (present progressive)
+- "Transaction confirmed" (past tense, it's done)
+- "Awaiting wallet approval" (clear what's needed)
+
+---
+
+## Edge Cases & Empty States
+
+### No Wallet Connected
+
+**Message:** "Connect your wallet to analyze and execute trades"  
+**CTA:** "Connect Wallet" button (large, centered)  
+**Visual:** Icon of wallet or connection symbol  
+**Tone:** Encouraging, not blocking
+
+### Wrong Network
+
+**Message:** "Please switch to Base L2"  
+**CTA:** "Switch Network" button (triggers wallet prompt)  
+**Visual:** Warning icon  
+**Tone:** Helpful, not scolding
+
+### No Routes Available
+
+**Message:** "No routing options found for this token pair"  
+**CTA:** "Try Different Pair" button  
+**Visual:** Search/magnifying glass icon  
+**Tone:** Neutral, not error
+
+### No Trade History
+
+**Message:** "Your trade history will appear here"  
+**CTA:** "Analyze Your First Trade" button  
+**Visual:** Empty table/ledger illustration  
+**Tone:** Inviting
+
+### Transaction Failed
+
+**Message:** Clear description (e.g., "Transaction rejected" or "Insufficient gas")  
+**CTA:** "Try Again" and "Get Help"  
+**Visual:** Alert icon  
+**Tone:** Supportive, troubleshooting
+
+---
+
+## Progressive Disclosure
+
+**Show What Matters, Hide What Doesn't**
+
+**Trade Input:**
+- Simple form initially
+- Advanced options behind "Advanced" expander
+- Slippage tolerance: Default 0.5%, editable if needed
+- Deadline: Default 20 minutes, editable if needed
+
+**Route Details:**
+- Summary row shows key metrics
+- Click row to expand full route details
+- Route path, pool addresses, fee tiers in expanded view
+
+**Compliance Report:**
+- Summary view shows key facts
+- "Show Full Report" expands all sections
+- Each section collapsible individually
+
+---
+
+## Mobile Considerations
+
+**Touch Targets:**
+- Minimum 44px × 44px (Apple HIG)
+- Spacing between targets: 8px minimum
+
+**Thumb Zones:**
+- Primary actions in bottom third of screen
+- Navigation in top third
+- Content in middle (scrollable)
+
+**Gestures:**
+- Swipe to dismiss modals
+- Pull to refresh on history page
+- Swipe between tabs (optional)
+
+**Reduced Complexity:**
+- Simplify tables to cards
+- Show fewer columns
+- Hide non-essential metrics
+- Prioritize touch-friendly controls
+
+---
+
+## Testing Checklist for Designer
+
+Before handoff, verify:
+
+**Visual Consistency:**
+- [ ] All primary buttons same height/padding
+- [ ] Consistent border radius across similar elements
+- [ ] Color palette limited to defined set
+- [ ] Typography uses defined scale
+
+**Spacing:**
+- [ ] All spacing snaps to 8px grid
+- [ ] Consistent padding in cards
+- [ ] Optical alignment (not just mathematical)
+
+**States:**
+- [ ] Every interactive element has hover state
+- [ ] All inputs have focus state
+- [ ] Disabled states are visually obvious
+- [ ] Loading states defined for async actions
+
+**Responsive:**
+- [ ] Designs for 1440px, 1024px, 768px, 375px
+- [ ] Text remains readable at all sizes
+- [ ] Touch targets adequate on mobile
+- [ ] Tables have mobile alternative
+
+**Accessibility:**
+- [ ] Contrast ratios meet WCAG AA
+- [ ] Focus states clearly visible
+- [ ] Icons have text labels/tooltips
+- [ ] Color not sole indicator of meaning
+
+---
+
+## Inspiration & References
+
+**Institutional Finance:**
+- Bloomberg Terminal (data density, trust)
+- Charles Schwab (clarity, professionalism)
+- Morgan Stanley (sophistication)
+
+**Modern SaaS:**
+- Stripe Dashboard (clear hierarchy, excellent empty states)
+- Linear (speed, polish, micro-interactions)
+- Notion (information architecture, progressive disclosure)
+
+**DeFi Done Right:**
+- Uniswap Labs Interface (clean, focused)
+- Aave (data visualization)
+- Etherscan (transparency, detail on demand)
+
+**NOT Like:**
+- Trading 212 (too gamified)
+- Robinhood (too consumer)
+- Most crypto exchanges (too chaotic)
+
+---
+
+## Final Thoughts for the Designer
+
+You're designing for people who make million-dollar decisions. Every pixel matters because trust matters. This isn't art—it's a tool. The best design will feel invisible. Users should focus on making informed decisions, not admiring your gradients.
+
+**The highest compliment would be:**  
+"I showed this to our compliance officer and she immediately understood it. We're adopting this for all our DeFi trades."
+
+**NOT:**  
+"Wow, this looks so cool!"
+
+Beauty comes from clarity. Sophistication comes from simplicity. Trust comes from transparency.
+
+Build something that looks as serious as the work it enables.
+
+---
+
+## Design Deliverables Expected
+
+1. **High-Fidelity Mockups** (Desktop & Mobile)
+   - Analyze Trade page (default state)
+   - Analyze Trade page (with results)
+   - Execution modal (all states)
+   - Post-trade analysis
+   - Trade history page
+   - Compliance report detail
+
+2. **Component Library**
+   - Buttons (all variants)
+   - Inputs
+   - Cards
+   - Tables
+   - Modal/Dialogs
+   - Loading states
+   - Empty states
+
+3. **Design System Documentation**
+   - Color palette with usage notes
+   - Typography scale
+   - Spacing scale
+   - Grid system
+   - Icon set
+
+4. **Prototype** (Optional but valuable)
+   - Clickable flow showing complete user journey
+   - Demonstrates animations and transitions
+   - Shows state changes
+
+---
+
+**This is institutional-grade work. Design accordingly.**
