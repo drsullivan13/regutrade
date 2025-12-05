@@ -9,13 +9,54 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLocation } from "wouter";
+import { useAccount } from "wagmi";
+
+const DEMO_TRADES_KEY = "defi-compliance-demo-trades";
+
+function getDemoTradeIds(): string[] {
+  try {
+    const stored = sessionStorage.getItem(DEMO_TRADES_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addDemoTradeId(tradeId: string) {
+  try {
+    const existing = getDemoTradeIds();
+    if (!existing.includes(tradeId)) {
+      sessionStorage.setItem(DEMO_TRADES_KEY, JSON.stringify([...existing, tradeId]));
+    }
+  } catch {
+    // Session storage not available
+  }
+}
 
 export default function History() {
   const [, setLocation] = useLocation();
+  const { address, isConnected } = useAccount();
+  
   const { data: trades = [], isLoading } = useQuery({
-    queryKey: ["trades"],
+    queryKey: ["trades", address, isConnected],
     queryFn: async () => {
-      const response = await fetch("/api/trades");
+      let url = "/api/trades";
+      
+      if (isConnected && address) {
+        // Connected wallet - fetch trades for this wallet
+        url += `?walletAddress=${address}`;
+      } else {
+        // Demo mode - fetch trades by session-stored IDs
+        const demoIds = getDemoTradeIds();
+        if (demoIds.length > 0) {
+          url += `?tradeIds=${demoIds.join(',')}`;
+        } else {
+          // No demo trades yet - return empty
+          return [];
+        }
+      }
+      
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch trades");
       return response.json();
     },

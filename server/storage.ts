@@ -1,6 +1,6 @@
 import { type User, type InsertUser, type Trade, type InsertTrade, users, trades } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -12,6 +12,8 @@ export interface IStorage {
   getTradeById(id: number): Promise<Trade | undefined>;
   getTradeByTradeId(tradeId: string): Promise<Trade | undefined>;
   getAllTrades(): Promise<Trade[]>;
+  getTradesByWallet(walletAddress: string): Promise<Trade[]>;
+  getTradesByIds(tradeIds: string[]): Promise<Trade[]>;
   getRecentTrades(limit?: number): Promise<Trade[]>;
 }
 
@@ -54,6 +56,23 @@ export class DatabaseStorage implements IStorage {
 
   async getAllTrades(): Promise<Trade[]> {
     return await db.select().from(trades).orderBy(desc(trades.timestamp));
+  }
+
+  async getTradesByWallet(walletAddress: string): Promise<Trade[]> {
+    return await db
+      .select()
+      .from(trades)
+      .where(eq(trades.walletAddress, walletAddress.toLowerCase()))
+      .orderBy(desc(trades.timestamp));
+  }
+
+  async getTradesByIds(tradeIds: string[]): Promise<Trade[]> {
+    if (tradeIds.length === 0) return [];
+    return await db
+      .select()
+      .from(trades)
+      .where(inArray(trades.tradeId, tradeIds))
+      .orderBy(desc(trades.timestamp));
   }
 
   async getRecentTrades(limit: number = 50): Promise<Trade[]> {

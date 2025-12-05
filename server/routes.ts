@@ -132,10 +132,27 @@ export async function registerRoutes(
     }
   });
 
-  // Get all trades (for history page)
+  // Get trades (for history page)
+  // Query params: 
+  //   - walletAddress: filter by wallet (for connected wallets)
+  //   - tradeIds: comma-separated trade IDs (for demo/session trades)
   app.get("/api/trades", async (req, res) => {
     try {
-      const trades = await storage.getAllTrades();
+      const { walletAddress, tradeIds } = req.query;
+      
+      let trades;
+      if (walletAddress && typeof walletAddress === 'string') {
+        // Get trades for a specific wallet
+        trades = await storage.getTradesByWallet(walletAddress);
+      } else if (tradeIds && typeof tradeIds === 'string') {
+        // Get trades by IDs (for demo mode with session storage)
+        const ids = tradeIds.split(',').filter(id => id.trim());
+        trades = await storage.getTradesByIds(ids);
+      } else {
+        // No filter - return all trades (admin view / demo)
+        trades = await storage.getAllTrades();
+      }
+      
       res.json(trades);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -164,7 +181,13 @@ export async function registerRoutes(
         return res.status(400).json({ error: validationError.message });
       }
 
-      const trade = await storage.createTrade(parsed.data);
+      // Normalize wallet address to lowercase for consistent filtering
+      const tradeData = {
+        ...parsed.data,
+        walletAddress: parsed.data.walletAddress.toLowerCase(),
+      };
+
+      const trade = await storage.createTrade(tradeData);
       res.status(201).json(trade);
     } catch (error: any) {
       res.status(500).json({ error: error.message });

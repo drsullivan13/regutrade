@@ -15,6 +15,7 @@ import {
 } from "@/lib/swap";
 import { TOKEN_ADDRESSES } from "@/lib/wagmi";
 import type { Address } from "viem";
+import { addDemoTradeId } from "@/pages/history";
 
 interface ExecutionModalProps {
   isOpen: boolean;
@@ -275,6 +276,12 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
       
       const createdTrade = await response.json();
       setTradeId(createdTrade.tradeId);
+      
+      // For demo mode (no connected wallet), save trade ID to session storage
+      // so users can see their demo trades in history
+      if (!isConnected) {
+        addDemoTradeId(createdTrade.tradeId);
+      }
     } catch (error) {
       console.error("Failed to create trade:", error);
     }
