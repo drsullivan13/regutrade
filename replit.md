@@ -41,8 +41,13 @@ Preferred communication style: Simple, everyday language.
 - RESTful endpoints under `/api` prefix
 - `/api/tokens/pairs` - Returns available trading pairs and token metadata
 - `/api/analyze` - Accepts trade parameters and returns routing analysis from Uniswap
-- `/api/trades` - CRUD operations for trade history
+- `/api/trades` - CRUD operations for trade history (supports wallet filtering via `walletAddress` or `tradeIds` query params)
 - `/api/execute` - Executes trades and stores compliance records
+
+**Wallet-based Trade Filtering:**
+- Connected wallets see only their own trades filtered by wallet address
+- Demo mode users see trades stored in session storage
+- Wallet addresses normalized to lowercase for case-insensitive matching
 
 **External Integration Strategy:**
 - Uniswap Labs API integration for routing quotes and execution data
