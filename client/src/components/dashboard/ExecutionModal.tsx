@@ -8,6 +8,7 @@ import { useLocation } from "wouter";
 interface ExecutionModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  analysisData: any;
 }
 
 type StepStatus = "pending" | "active" | "completed";
@@ -19,9 +20,10 @@ interface Step {
   status: StepStatus;
 }
 
-export default function ExecutionModal({ isOpen, onOpenChange }: ExecutionModalProps) {
+export default function ExecutionModal({ isOpen, onOpenChange, analysisData }: ExecutionModalProps) {
   const [, setLocation] = useLocation();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [tradeId, setTradeId] = useState<string>("");
   const [steps, setSteps] = useState<Step[]>([
     { id: "wallet", label: "Wallet Approval", description: "Confirm transaction in your wallet", status: "active" },
     { id: "compliance", label: "Compliance Check", description: "Verifying sanctions and limits", status: "pending" },
@@ -29,17 +31,22 @@ export default function ExecutionModal({ isOpen, onOpenChange }: ExecutionModalP
     { id: "settlement", label: "Settlement", description: "Waiting for block confirmation", status: "pending" },
   ]);
 
-  // Simulate progress
+  // Simulate progress and create trade
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && analysisData) {
       setCurrentStepIndex(0);
-      // Reset steps
       setSteps(steps.map((s, i) => ({ ...s, status: i === 0 ? "active" : "pending" })));
 
       const interval = setInterval(() => {
         setCurrentStepIndex((prev) => {
           if (prev >= 3) {
             clearInterval(interval);
+            
+            // Create trade in database after completion
+            if (prev === 3) {
+              createTrade();
+            }
+            
             return prev;
           }
           const next = prev + 1;
@@ -55,9 +62,50 @@ export default function ExecutionModal({ isOpen, onOpenChange }: ExecutionModalP
 
       return () => clearInterval(interval);
     }
-  }, [isOpen]);
+  }, [isOpen, analysisData]);
 
-  const isComplete = steps[steps.length - 1].status === "completed" || steps[steps.length - 1].status === "active"; // Simplified for demo
+  const createTrade = async () => {
+    if (!analysisData) return;
+
+    const bestRoute = analysisData.routes.find((r: any) => r.isBest);
+    if (!bestRoute) return;
+
+    const tradeData = {
+      tradeId: `TR-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+      pairFrom: analysisData.pairFrom,
+      pairTo: analysisData.pairTo,
+      amountIn: analysisData.amountIn,
+      amountOut: bestRoute.output,
+      type: "buy",
+      route: bestRoute.route,
+      effectiveRate: "1842.15",
+      gasCost: bestRoute.gas,
+      gasUsed: "145203",
+      executionQuality: "Excellent",
+      qualityScore: "99.48",
+      predictedOutput: bestRoute.predictedOutput,
+      priceImpact: bestRoute.priceImpact,
+      transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
+      walletAddress: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
+      network: "Base L2",
+      status: "Completed",
+    };
+
+    try {
+      const response = await fetch("/api/trades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tradeData),
+      });
+      
+      const createdTrade = await response.json();
+      setTradeId(createdTrade.tradeId);
+    } catch (error) {
+      console.error("Failed to create trade:", error);
+    }
+  };
+
+  const isComplete = steps[steps.length - 1].status === "completed";
 
   const handleViewReport = () => {
     onOpenChange(false);
@@ -83,14 +131,13 @@ export default function ExecutionModal({ isOpen, onOpenChange }: ExecutionModalP
               )}
             </DialogTitle>
             <div className="mt-2 text-slate-400 font-mono text-sm">
-              Tx Hash: {isComplete ? "0x7a92...f1a9" : "Pending..."}
+              {isComplete ? `ID: ${tradeId}` : "Processing..."}
             </div>
           </DialogHeader>
         </div>
 
         <div className="p-8 bg-white">
           <div className="relative flex flex-col gap-8 pl-4">
-            {/* Vertical Line */}
             <div className="absolute left-[19px] top-2 bottom-2 w-0.5 bg-slate-100"></div>
 
             {steps.map((step, index) => (
@@ -126,7 +173,7 @@ export default function ExecutionModal({ isOpen, onOpenChange }: ExecutionModalP
 
           <div className="mt-8 flex justify-end pt-6 border-t border-slate-100">
             {isComplete ? (
-               <Button onClick={handleViewReport} className="bg-primary hover:bg-blue-800 w-full sm:w-auto">
+               <Button onClick={handleViewReport} className="bg-primary hover:bg-blue-800 w-full sm:w-auto" data-testid="button-view-analysis">
                  View Post-Trade Analysis
                </Button>
             ) : (

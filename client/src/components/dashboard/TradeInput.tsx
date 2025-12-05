@@ -6,7 +6,23 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowRight, ArrowDown, Settings2 } from "lucide-react";
 
-export default function TradeInput() {
+interface TradeInputProps {
+  onAnalyze: (params: { pairFrom: string; pairTo: string; amountIn: string }) => void;
+}
+
+export default function TradeInput({ onAnalyze }: TradeInputProps) {
+  const [sellToken, setSellToken] = useState("USDC");
+  const [buyToken, setBuyToken] = useState("WETH");
+  const [amount, setAmount] = useState("500000");
+
+  const handleAnalyze = () => {
+    onAnalyze({
+      pairFrom: sellToken,
+      pairTo: buyToken,
+      amountIn: amount,
+    });
+  };
+
   return (
     <Card className="w-full shadow-sm border-slate-200">
       <CardHeader className="pb-4">
@@ -25,12 +41,14 @@ export default function TradeInput() {
                   type="number" 
                   placeholder="0.00" 
                   className="h-12 text-lg font-mono pl-4 border-slate-300 focus-visible:ring-primary"
-                  defaultValue="500000"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  data-testid="input-sell-amount"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">USD Value</span>
               </div>
-              <Select defaultValue="USDC">
-                <SelectTrigger className="w-[120px] h-12 border-slate-300 font-medium bg-slate-50">
+              <Select value={sellToken} onValueChange={setSellToken}>
+                <SelectTrigger className="w-[120px] h-12 border-slate-300 font-medium bg-slate-50" data-testid="select-sell-token">
                   <SelectValue placeholder="Token" />
                 </SelectTrigger>
                 <SelectContent>
@@ -42,7 +60,7 @@ export default function TradeInput() {
             </div>
             <div className="flex justify-between text-xs text-slate-500 px-1">
               <span>Balance: $1,240,500.00</span>
-              <span className="text-primary cursor-pointer font-medium">Max</span>
+              <span className="text-primary cursor-pointer font-medium" onClick={() => setAmount("1240500")}>Max</span>
             </div>
           </div>
 
@@ -56,8 +74,8 @@ export default function TradeInput() {
           <div className="space-y-2">
             <Label htmlFor="buy-token" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Buy</Label>
             <div className="flex gap-2">
-              <Select defaultValue="WETH">
-                <SelectTrigger className="flex-1 h-12 border-slate-300 font-medium bg-slate-50">
+              <Select value={buyToken} onValueChange={setBuyToken}>
+                <SelectTrigger className="flex-1 h-12 border-slate-300 font-medium bg-slate-50" data-testid="select-buy-token">
                   <SelectValue placeholder="Select Token" />
                 </SelectTrigger>
                 <SelectContent>
@@ -80,7 +98,11 @@ export default function TradeInput() {
            <span>Advanced Parameters</span>
         </div>
 
-        <Button className="w-full h-14 text-lg font-medium bg-primary hover:bg-blue-800 shadow-md transition-all active:scale-[0.99]">
+        <Button 
+          className="w-full h-14 text-lg font-medium bg-primary hover:bg-blue-800 shadow-md transition-all active:scale-[0.99]"
+          onClick={handleAnalyze}
+          data-testid="button-analyze-routes"
+        >
           Analyze Routes
         </Button>
       </CardContent>

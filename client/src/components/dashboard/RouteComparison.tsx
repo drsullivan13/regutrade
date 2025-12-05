@@ -15,41 +15,12 @@ interface Route {
   tags: string[];
 }
 
-const routes: Route[] = [
-  {
-    id: "1",
-    name: "Uniswap V3 + Curve",
-    output: "271.4205 WETH",
-    gas: "$4.25",
-    netValue: "$499,995.75",
-    isBest: true,
-    tags: ["Best Execution", "Low Slippage"],
-  },
-  {
-    id: "2",
-    name: "1inch Aggregator",
-    output: "271.3800 WETH",
-    gas: "$5.10",
-    netValue: "$499,920.10",
-    isBest: false,
-    tags: [],
-  },
-  {
-    id: "3",
-    name: "SushiSwap V3",
-    output: "271.1500 WETH",
-    gas: "$3.80",
-    netValue: "$499,500.50",
-    isBest: false,
-    tags: [],
-  },
-];
-
 interface RouteComparisonProps {
-  onExecute: () => void;
+  routes: Route[];
+  onExecute: (route: Route) => void;
 }
 
-export default function RouteComparison({ onExecute }: RouteComparisonProps) {
+export default function RouteComparison({ routes, onExecute }: RouteComparisonProps) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
       <Table>
@@ -81,13 +52,14 @@ export default function RouteComparison({ onExecute }: RouteComparisonProps) {
                 "transition-colors h-16",
                 route.isBest ? "bg-green-50/30 hover:bg-green-50/50" : "hover:bg-slate-50"
               )}
+              data-testid={`row-route-${route.id}`}
             >
               <TableCell className="relative">
                 {route.isBest && (
                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-600"></div>
                 )}
                 <div className="flex flex-col">
-                   <span className="font-bold text-slate-900 text-base">{route.name}</span>
+                   <span className="font-bold text-slate-900 text-base" data-testid={`text-route-name-${route.id}`}>{route.name}</span>
                    {route.tags.length > 0 && (
                      <div className="flex gap-1 mt-1">
                        {route.tags.map(tag => (
@@ -99,7 +71,7 @@ export default function RouteComparison({ onExecute }: RouteComparisonProps) {
                    )}
                 </div>
               </TableCell>
-              <TableCell className="text-right font-mono text-base font-medium text-slate-900 tabular-nums">
+              <TableCell className="text-right font-mono text-base font-medium text-slate-900 tabular-nums" data-testid={`text-output-${route.id}`}>
                 {route.output}
               </TableCell>
               <TableCell className="text-right font-mono text-sm text-slate-500 tabular-nums">
@@ -117,13 +89,14 @@ export default function RouteComparison({ onExecute }: RouteComparisonProps) {
               </TableCell>
               <TableCell>
                 <Button 
-                  onClick={onExecute}
+                  onClick={() => onExecute(route)}
                   className={cn(
                     "w-full font-medium shadow-sm transition-all",
                     route.isBest 
                       ? "bg-primary hover:bg-blue-800" 
                       : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 shadow-none"
                   )}
+                  data-testid={`button-execute-${route.id}`}
                 >
                   Execute
                 </Button>

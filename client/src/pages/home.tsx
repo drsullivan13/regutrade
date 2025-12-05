@@ -4,18 +4,31 @@ import RouteComparison from "@/components/dashboard/RouteComparison";
 import RecommendationPanel from "@/components/dashboard/RecommendationPanel";
 import ExecutionModal from "@/components/dashboard/ExecutionModal";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 
 export default function Home() {
   const [showResults, setShowResults] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [analysisData, setAnalysisData] = useState<any>(null);
 
-  const handleAnalyze = () => {
-     // Simulate loading then show results
-     setTimeout(() => setShowResults(true), 800);
+  const handleAnalyze = async (tradeParams: { pairFrom: string; pairTo: string; amountIn: string }) => {
+    try {
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tradeParams),
+      });
+      const data = await response.json();
+      setAnalysisData(data);
+      setShowResults(true);
+    } catch (error) {
+      console.error("Failed to analyze routes:", error);
+    }
   };
 
   const handleExecute = () => {
-     setShowModal(true);
+    setShowModal(true);
   };
 
   return (
@@ -29,15 +42,7 @@ export default function Home() {
       </div>
 
       <div className="grid gap-8">
-        <div className="relative">
-           <TradeInput />
-           {/* Overlay click handler for demo purposes if needed, but button inside works too */}
-           {!showResults && (
-             <div className="absolute bottom-6 right-6 md:bottom-8 md:right-8 pointer-events-none">
-               {/* Hint: Click Analyze Routes in the card */}
-             </div>
-           )}
-        </div>
+        <TradeInput onAnalyze={handleAnalyze} />
         
         {!showResults ? (
           <div className="rounded-lg border border-dashed border-slate-300 p-12 text-center bg-slate-50/50">
@@ -48,21 +53,24 @@ export default function Home() {
               <p className="text-slate-500 mt-2 max-w-md mx-auto">
                 Enter your trade details above and click "Analyze Routes" to view optimal execution paths across the DeFi ecosystem.
               </p>
-              <div className="mt-6">
-                <Button variant="outline" onClick={handleAnalyze}>
-                   Demo: Show Results
-                </Button>
-              </div>
           </div>
         ) : (
           <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
-            <RouteComparison onExecute={handleExecute} />
-            <RecommendationPanel />
+            {analysisData && (
+              <>
+                <RouteComparison routes={analysisData.routes} onExecute={handleExecute} />
+                <RecommendationPanel />
+              </>
+            )}
           </div>
         )}
       </div>
 
-      <ExecutionModal isOpen={showModal} onOpenChange={setShowModal} />
+      <ExecutionModal 
+        isOpen={showModal} 
+        onOpenChange={setShowModal}
+        analysisData={analysisData}
+      />
     </div>
   );
 }
