@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -27,7 +27,7 @@ export const trades = pgTable("trades", {
   pairTo: text("pair_to").notNull(),
   amountIn: text("amount_in").notNull(),
   amountOut: text("amount_out").notNull(),
-  type: text("type").notNull(), // "buy" or "sell"
+  type: text("type").notNull(),
   
   // Execution Details
   route: text("route").notNull(),
@@ -48,6 +48,9 @@ export const trades = pgTable("trades", {
   
   // Compliance
   status: text("status").notNull().default("Completed"),
+  
+  // Pre-trade analysis data (routes that were evaluated)
+  routesAnalyzed: jsonb("routes_analyzed"),
 });
 
 export const insertTradeSchema = createInsertSchema(trades).omit({

@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, ShieldCheck, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
+import type { Route } from "./RouteComparison";
 
 interface ExecutionModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   analysisData: any;
+  selectedRoute?: Route | null;
 }
 
 type StepStatus = "pending" | "active" | "completed";
@@ -20,20 +22,23 @@ interface Step {
   status: StepStatus;
 }
 
-export default function ExecutionModal({ isOpen, onOpenChange, analysisData }: ExecutionModalProps) {
+export default function ExecutionModal({ isOpen, onOpenChange, analysisData, selectedRoute }: ExecutionModalProps) {
   const [, setLocation] = useLocation();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [tradeId, setTradeId] = useState<string>("");
   const [steps, setSteps] = useState<Step[]>([
     { id: "wallet", label: "Wallet Approval", description: "Confirm transaction in your wallet", status: "active" },
     { id: "compliance", label: "Compliance Check", description: "Verifying sanctions and limits", status: "pending" },
-    { id: "execution", label: "On-Chain Execution", description: "Swapping tokens via Uniswap V3", status: "pending" },
+    { id: "execution", label: "On-Chain Execution", description: "Swapping tokens via Uniswap", status: "pending" },
     { id: "settlement", label: "Settlement", description: "Waiting for block confirmation", status: "pending" },
   ]);
 
+  // Get the route to execute (selected or best available)
+  const routeToExecute = selectedRoute || analysisData?.routes?.find((r: Route) => r.isBest);
+
   // Simulate progress and create trade
   useEffect(() => {
-    if (isOpen && analysisData) {
+    if (isOpen && analysisData && routeToExecute) {
       setCurrentStepIndex(0);
       setSteps(steps.map((s, i) => ({ ...s, status: i === 0 ? "active" : "pending" })));
 
@@ -62,33 +67,31 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData }: E
 
       return () => clearInterval(interval);
     }
-  }, [isOpen, analysisData]);
+  }, [isOpen, analysisData, routeToExecute]);
 
   const createTrade = async () => {
-    if (!analysisData) return;
-
-    const bestRoute = analysisData.routes.find((r: any) => r.isBest);
-    if (!bestRoute) return;
+    if (!analysisData || !routeToExecute) return;
 
     const tradeData = {
       tradeId: `TR-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
       pairFrom: analysisData.pairFrom,
       pairTo: analysisData.pairTo,
       amountIn: analysisData.amountIn,
-      amountOut: bestRoute.output,
+      amountOut: routeToExecute.outputRaw || routeToExecute.output.split(" ")[0],
       type: "buy",
-      route: bestRoute.route,
+      route: routeToExecute.routeString || routeToExecute.name,
       effectiveRate: "1842.15",
-      gasCost: bestRoute.gas,
-      gasUsed: "145203",
+      gasCost: routeToExecute.gas,
+      gasUsed: routeToExecute.gasRaw || "145203",
       executionQuality: "Excellent",
       qualityScore: "99.48",
-      predictedOutput: bestRoute.predictedOutput,
-      priceImpact: bestRoute.priceImpact,
+      predictedOutput: routeToExecute.predictedOutput || routeToExecute.output.split(" ")[0],
+      priceImpact: routeToExecute.priceImpact,
       transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
       walletAddress: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
       network: "Base L2",
       status: "Completed",
+      routesAnalyzed: analysisData.routes,
     };
 
     try {
@@ -130,8 +133,15 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData }: E
                  </>
               )}
             </DialogTitle>
-            <div className="mt-2 text-slate-400 font-mono text-sm">
-              {isComplete ? `ID: ${tradeId}` : "Processing..."}
+            <div className="mt-2 space-y-1">
+              <div className="text-slate-400 font-mono text-sm">
+                {isComplete ? `ID: ${tradeId}` : "Processing..."}
+              </div>
+              {routeToExecute && (
+                <div className="text-slate-300 text-sm">
+                  Route: {routeToExecute.name}
+                </div>
+              )}
             </div>
           </DialogHeader>
         </div>
