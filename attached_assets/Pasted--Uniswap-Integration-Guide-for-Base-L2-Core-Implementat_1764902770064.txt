@@ -1,0 +1,1015 @@
+# Uniswap Integration Guide for Base L2
+## Core Implementation - No UI Dependencies
+
+This guide provides implementation details for integrating Uniswap on Base L2 (Chain ID: 8453). It covers both **V3** and **V4** protocols with a recommendation on which to use.
+
+---
+
+## Protocol Recommendation
+
+### Use Uniswap V3 for this MVP
+
+**Reasons:**
+1. **More liquidity on Base L2** - V4 just launched (January 2025), liquidity is still migrating
+2. **Simpler integration** - V3 has direct contract calls; V4 requires Universal Router command encoding
+3. **Better documentation/examples** - V3 has years of battle-tested patterns
+4. **Lower risk** - V3 is proven; V4 is new with potential edge cases
+
+**When to consider V4:**
+- Once V4 liquidity on Base exceeds V3 (check via [Uniswap Info](https://info.uniswap.org))
+- If you need V4-specific features (hooks, custom pool logic)
+- For future-proofing after V4 becomes dominant
+
+---
+
+## Contract Addresses (Base L2 Mainnet - Chain ID: 8453)
+
+### Uniswap V3 Contracts
+```typescript
+const V3_CONTRACTS = {
+  QUOTER_V2: '0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a',
+  SWAP_ROUTER_02: '0x2626664c2603336E57B271c5C0b26F421741e481',
+  FACTORY: '0x33128a8fC17869897dcE68Ed026d694621f6FDfD',
+  POSITION_MANAGER: '0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1',
+} as const;
+
+const V3_FEE_TIERS = [100, 500, 3000, 10000] as const; // 0.01%, 0.05%, 0.3%, 1%
+```
+
+### Uniswap V4 Contracts
+```typescript
+const V4_CONTRACTS = {
+  POOL_MANAGER: '0x498581ff718922c3f8e6a244956af099b2652b2b',
+  QUOTER: '0x0d5e0f971ed27fbff6c2837bf31316121532048d',
+  UNIVERSAL_ROUTER: '0x6ff5693b99212da76ad316178a184ab56d299b43',
+  POSITION_MANAGER: '0x7c5f5a4bbd8fd63184577525326123b519429bdc',
+  STATE_VIEW: '0xa3c0c9b65bad0b08107aa264b0f3db444b867a71',
+} as const;
+```
+
+### Common Contracts
+```typescript
+const COMMON_CONTRACTS = {
+  PERMIT2: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
+} as const;
+```
+
+### Token Addresses (Base L2)
+```typescript
+const TOKENS = {
+  // Native ETH wrapper - use for swapping ETH
+  WETH: {
+    address: '0x4200000000000000000000000000000000000006',
+    symbol: 'WETH',
+    decimals: 18,
+    name: 'Wrapped Ether',
+  },
+  // Stablecoins
+  USDC: {
+    address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    symbol: 'USDC',
+    decimals: 6,
+    name: 'USD Coin',
+  },
+  DAI: {
+    address: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb',
+    symbol: 'DAI',
+    decimals: 18,
+    name: 'Dai Stablecoin',
+  },
+} as const;
+
+// Helper type for token lookups
+type TokenSymbol = keyof typeof TOKENS;
+```
+
+### Network Configuration
+```typescript
+const BASE_CONFIG = {
+  chainId: 8453,
+  name: 'Base',
+  rpcUrl: 'https://mainnet.base.org',
+  blockExplorer: 'https://basescan.org',
+};
+```
+
+### Token Liquidity Notes
+
+| Token | Primary Pairs | Expected Liquidity |
+|-------|---------------|-------------------|
+| WETH  | USDC, DAI, most tokens | High - Base's primary trading asset |
+| USDC  | WETH, most tokens | High - Primary stablecoin |
+| DAI   | USDC, WETH | Medium |
+
+---
+
+## ABIs
+
+### Uniswap V3 QuoterV2 ABI
+```typescript
+const QUOTER_V2_ABI = [
+  {
+    inputs: [
+      {
+        components: [
+          { name: 'tokenIn', type: 'address' },
+          { name: 'tokenOut', type: 'address' },
+          { name: 'amountIn', type: 'uint256' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'sqrtPriceLimitX96', type: 'uint160' },
+        ],
+        name: 'params',
+        type: 'tuple',
+      },
+    ],
+    name: 'quoteExactInputSingle',
+    outputs: [
+      { name: 'amountOut', type: 'uint256' },
+      { name: 'sqrtPriceX96After', type: 'uint160' },
+      { name: 'initializedTicksCrossed', type: 'uint32' },
+      { name: 'gasEstimate', type: 'uint256' },
+    ],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const;
+```
+
+### Uniswap V3 SwapRouter02 ABI
+```typescript
+const SWAP_ROUTER_02_ABI = [
+  {
+    inputs: [
+      {
+        components: [
+          { name: 'tokenIn', type: 'address' },
+          { name: 'tokenOut', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'recipient', type: 'address' },
+          { name: 'amountIn', type: 'uint256' },
+          { name: 'amountOutMinimum', type: 'uint256' },
+          { name: 'sqrtPriceLimitX96', type: 'uint160' },
+        ],
+        name: 'params',
+        type: 'tuple',
+      },
+    ],
+    name: 'exactInputSingle',
+    outputs: [{ name: 'amountOut', type: 'uint256' }],
+    stateMutability: 'payable',
+    type: 'function',
+  },
+] as const;
+```
+
+### Uniswap V4 Quoter ABI
+```typescript
+const V4_QUOTER_ABI = [
+  {
+    inputs: [
+      {
+        components: [
+          {
+            components: [
+              { name: 'currency0', type: 'address' },
+              { name: 'currency1', type: 'address' },
+              { name: 'fee', type: 'uint24' },
+              { name: 'tickSpacing', type: 'int24' },
+              { name: 'hooks', type: 'address' },
+            ],
+            name: 'poolKey',
+            type: 'tuple',
+          },
+          { name: 'zeroForOne', type: 'bool' },
+          { name: 'exactAmount', type: 'uint128' },
+          { name: 'hookData', type: 'bytes' },
+        ],
+        name: 'params',
+        type: 'tuple',
+      },
+    ],
+    name: 'quoteExactInputSingle',
+    outputs: [
+      { name: 'amountOut', type: 'uint256' },
+      { name: 'gasEstimate', type: 'uint256' },
+    ],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const;
+```
+
+### ERC20 ABI
+```typescript
+const ERC20_ABI = [
+  {
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    name: 'approve',
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+    ],
+    name: 'allowance',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'account', type: 'address' }],
+    name: 'balanceOf',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+```
+
+### Uniswap V3 Pool Swap Event ABI (for verification)
+```typescript
+const V3_POOL_ABI = [
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'sender', type: 'address' },
+      { indexed: true, name: 'recipient', type: 'address' },
+      { indexed: false, name: 'amount0', type: 'int256' },
+      { indexed: false, name: 'amount1', type: 'int256' },
+      { indexed: false, name: 'sqrtPriceX96', type: 'uint160' },
+      { indexed: false, name: 'liquidity', type: 'uint128' },
+      { indexed: false, name: 'tick', type: 'int24' },
+    ],
+    name: 'Swap',
+    type: 'event',
+  },
+] as const;
+```
+
+---
+
+## Goal 1: Price Lookup / Get Quote
+
+### Using Uniswap V3 QuoterV2 (Recommended)
+
+```typescript
+import { createPublicClient, http, parseUnits, formatUnits } from 'viem';
+import { base } from 'viem/chains';
+
+const publicClient = createPublicClient({
+  chain: base,
+  transport: http('https://mainnet.base.org'),
+});
+
+interface QuoteResult {
+  amountOut: bigint;
+  sqrtPriceX96After: bigint;
+  initializedTicksCrossed: number;
+  gasEstimate: bigint;
+}
+
+/**
+ * Get a quote for swapping tokens using V3 QuoterV2
+ * @param tokenIn - Input token address
+ * @param tokenOut - Output token address
+ * @param amountIn - Amount to swap (in wei/smallest unit)
+ * @param fee - Pool fee tier (100, 500, 3000, or 10000)
+ */
+async function getQuoteV3(
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+  fee: number
+): Promise<QuoteResult> {
+  const result = await publicClient.readContract({
+    address: '0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a',
+    abi: QUOTER_V2_ABI,
+    functionName: 'quoteExactInputSingle',
+    args: [{
+      tokenIn: tokenIn as `0x${string}`,
+      tokenOut: tokenOut as `0x${string}`,
+      amountIn,
+      fee,
+      sqrtPriceLimitX96: 0n,
+    }],
+  });
+
+  return {
+    amountOut: result[0],
+    sqrtPriceX96After: result[1],
+    initializedTicksCrossed: result[2],
+    gasEstimate: result[3],
+  };
+}
+
+// Example usage:
+async function exampleQuote() {
+  const amountIn = parseUnits('1000', 6); // 1000 USDC (6 decimals)
+  
+  const quote = await getQuoteV3(
+    TOKENS.USDC.address,
+    TOKENS.WETH.address,
+    amountIn,
+    500 // 0.05% fee tier
+  );
+  
+  console.log('Output:', formatUnits(quote.amountOut, 18), 'ETH');
+  console.log('Gas estimate:', quote.gasEstimate.toString());
+}
+```
+
+### Using Uniswap V4 Quoter
+
+```typescript
+interface V4QuoteResult {
+  amountOut: bigint;
+  gasEstimate: bigint;
+}
+
+/**
+ * Get a quote using V4 Quoter
+ * Note: V4 uses PoolKey structure instead of just token addresses
+ */
+async function getQuoteV4(
+  currency0: string,
+  currency1: string,
+  fee: number,
+  tickSpacing: number,
+  amountIn: bigint,
+  zeroForOne: boolean
+): Promise<V4QuoteResult> {
+  const result = await publicClient.readContract({
+    address: '0x0d5e0f971ed27fbff6c2837bf31316121532048d',
+    abi: V4_QUOTER_ABI,
+    functionName: 'quoteExactInputSingle',
+    args: [{
+      poolKey: {
+        currency0: currency0 as `0x${string}`,
+        currency1: currency1 as `0x${string}`,
+        fee,
+        tickSpacing,
+        hooks: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+      },
+      zeroForOne,
+      exactAmount: amountIn,
+      hookData: '0x' as `0x${string}`,
+    }],
+  });
+
+  return {
+    amountOut: result[0],
+    gasEstimate: result[1],
+  };
+}
+```
+
+---
+
+## Goal 2: Find Optimal Route
+
+### Query All Fee Tiers and Compare
+
+```typescript
+interface RouteQuote {
+  fee: number;
+  feeLabel: string;
+  amountOut: bigint;
+  gasEstimate: bigint;
+  netOutput: bigint; // amountOut adjusted for gas cost
+}
+
+const FEE_TIER_LABELS: Record<number, string> = {
+  100: '0.01%',
+  500: '0.05%',
+  3000: '0.3%',
+  10000: '1%',
+};
+
+/**
+ * Find the best route by querying all fee tiers
+ * @returns Array of routes sorted by output (highest first), plus the best route
+ */
+async function findBestRoute(
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+  ethPriceUsd: number = 3500 // Current ETH price for gas cost calculation
+): Promise<{ routes: RouteQuote[]; best: RouteQuote | null }> {
+  const feeTiers = [100, 500, 3000, 10000];
+  const routes: RouteQuote[] = [];
+
+  // Query all fee tiers in parallel
+  const results = await Promise.allSettled(
+    feeTiers.map(async (fee) => {
+      const quote = await getQuoteV3(tokenIn, tokenOut, amountIn, fee);
+      return { fee, quote };
+    })
+  );
+
+  // Process results
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      const { fee, quote } = result.value;
+      
+      // Calculate gas cost in output token terms (simplified)
+      // Assumes ~150k gas per swap, Base gas price ~0.001 gwei
+      const gasCostWei = quote.gasEstimate * 1000000n; // ~0.001 gwei
+      const gasCostUsd = Number(gasCostWei) / 1e18 * ethPriceUsd;
+      
+      routes.push({
+        fee,
+        feeLabel: FEE_TIER_LABELS[fee],
+        amountOut: quote.amountOut,
+        gasEstimate: quote.gasEstimate,
+        netOutput: quote.amountOut, // On L2, gas is negligible
+      });
+    }
+    // If rejected, pool doesn't exist for this fee tier - skip it
+  }
+
+  // Sort by amountOut descending (highest output first)
+  routes.sort((a, b) => {
+    if (b.amountOut > a.amountOut) return 1;
+    if (b.amountOut < a.amountOut) return -1;
+    return 0;
+  });
+
+  return {
+    routes,
+    best: routes[0] || null,
+  };
+}
+
+// Example usage:
+async function exampleFindBestRoute() {
+  const amountIn = parseUnits('10000', 6); // 10,000 USDC
+  
+  const { routes, best } = await findBestRoute(
+    TOKENS.USDC.address,
+    TOKENS.WETH.address,
+    amountIn
+  );
+  
+  console.log('All routes:');
+  for (const route of routes) {
+    console.log(`  ${route.feeLabel}: ${formatUnits(route.amountOut, 18)} ETH`);
+  }
+  
+  if (best) {
+    console.log(`\nBest route: ${best.feeLabel} pool`);
+    console.log(`Expected output: ${formatUnits(best.amountOut, 18)} ETH`);
+  }
+}
+```
+
+---
+
+## Goal 3: Execute Swap
+
+### Using Uniswap V3 SwapRouter02
+
+```typescript
+import { createWalletClient, http, parseUnits } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { base } from 'viem/chains';
+
+// For browser wallet, use wagmi hooks instead
+// This example shows direct execution for clarity
+
+interface SwapParams {
+  tokenIn: string;
+  tokenOut: string;
+  fee: number;
+  amountIn: bigint;
+  amountOutMinimum: bigint;
+  recipient: string;
+  slippageTolerance?: number; // Default 0.5%
+}
+
+/**
+ * Execute a swap on Uniswap V3
+ * Steps: 1) Check allowance 2) Approve if needed 3) Execute swap
+ */
+async function executeSwapV3(
+  walletClient: any, // WalletClient from viem
+  params: SwapParams
+): Promise<{ txHash: string; receipt: any }> {
+  const account = walletClient.account.address;
+  
+  // Step 1: Check current allowance
+  const allowance = await publicClient.readContract({
+    address: params.tokenIn as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: [account, V3_CONTRACTS.SWAP_ROUTER_02],
+  });
+
+  // Step 2: Approve if needed
+  if (allowance < params.amountIn) {
+    console.log('Approving token spend...');
+    const approvalHash = await walletClient.writeContract({
+      address: params.tokenIn as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [V3_CONTRACTS.SWAP_ROUTER_02, params.amountIn],
+    });
+    
+    // Wait for approval confirmation
+    await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+    console.log('Approval confirmed');
+  }
+
+  // Step 3: Calculate minimum output with slippage
+  const slippage = params.slippageTolerance ?? 0.5;
+  const slippageMultiplier = BigInt(Math.floor((100 - slippage) * 100));
+  const amountOutMinimum = (params.amountOutMinimum * slippageMultiplier) / 10000n;
+
+  // Step 4: Execute swap
+  console.log('Executing swap...');
+  const swapHash = await walletClient.writeContract({
+    address: V3_CONTRACTS.SWAP_ROUTER_02 as `0x${string}`,
+    abi: SWAP_ROUTER_02_ABI,
+    functionName: 'exactInputSingle',
+    args: [{
+      tokenIn: params.tokenIn as `0x${string}`,
+      tokenOut: params.tokenOut as `0x${string}`,
+      fee: params.fee,
+      recipient: params.recipient as `0x${string}`,
+      amountIn: params.amountIn,
+      amountOutMinimum,
+      sqrtPriceLimitX96: 0n,
+    }],
+  });
+
+  // Step 5: Wait for confirmation
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: swapHash });
+  
+  return {
+    txHash: swapHash,
+    receipt,
+  };
+}
+
+// Example usage with wagmi (browser wallet):
+/*
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+
+function useSwap() {
+  const { writeContractAsync } = useWriteContract();
+  
+  async function swap(params: SwapParams) {
+    // Approval
+    const approvalHash = await writeContractAsync({
+      address: params.tokenIn,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [V3_CONTRACTS.SWAP_ROUTER_02, params.amountIn],
+    });
+    
+    // Swap
+    const swapHash = await writeContractAsync({
+      address: V3_CONTRACTS.SWAP_ROUTER_02,
+      abi: SWAP_ROUTER_02_ABI,
+      functionName: 'exactInputSingle',
+      args: [{ ... }],
+    });
+    
+    return swapHash;
+  }
+  
+  return { swap };
+}
+*/
+```
+
+### Using Uniswap V4 Universal Router
+
+V4 swaps require encoding commands for the Universal Router. This is more complex:
+
+```typescript
+// V4 Swap via Universal Router
+// This requires encoding multiple actions
+
+const COMMANDS = {
+  V4_SWAP: 0x10,
+} as const;
+
+const ACTIONS = {
+  SWAP_EXACT_IN_SINGLE: 0x00,
+  SETTLE_ALL: 0x09,
+  TAKE_ALL: 0x0a,
+} as const;
+
+interface V4SwapParams {
+  poolKey: {
+    currency0: string;
+    currency1: string;
+    fee: number;
+    tickSpacing: number;
+    hooks: string;
+  };
+  zeroForOne: boolean;
+  amountIn: bigint;
+  amountOutMinimum: bigint;
+  deadline: number;
+}
+
+/**
+ * Build calldata for V4 swap via Universal Router
+ * Note: This is a simplified example. Production code should use
+ * @uniswap/universal-router-sdk for proper encoding.
+ */
+function buildV4SwapCalldata(params: V4SwapParams): {
+  commands: `0x${string}`;
+  inputs: `0x${string}`[];
+} {
+  // This is pseudocode - actual implementation requires proper ABI encoding
+  // Recommend using @uniswap/universal-router-sdk
+  
+  const commands = '0x10'; // V4_SWAP command
+  
+  // Encode actions: SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL
+  const actions = [
+    ACTIONS.SWAP_EXACT_IN_SINGLE,
+    ACTIONS.SETTLE_ALL,
+    ACTIONS.TAKE_ALL,
+  ];
+  
+  // Each action needs its params encoded
+  // This requires proper ABI encoding using ethers.js or viem
+  
+  return {
+    commands: commands as `0x${string}`,
+    inputs: [], // Properly encoded inputs
+  };
+}
+
+// For V4 swaps, it's recommended to use the SDK:
+// npm install @uniswap/universal-router-sdk @uniswap/v4-sdk
+```
+
+---
+
+## Goal 4: Verify Execution Efficiency
+
+### Parse Transaction Receipt and Compare to Quote
+
+```typescript
+import { decodeEventLog } from 'viem';
+
+interface ExecutionVerification {
+  predictedOutput: bigint;
+  actualOutput: bigint;
+  executionQuality: number; // Percentage (e.g., 99.5)
+  rating: 'Excellent' | 'Good' | 'Acceptable' | 'Review Required';
+  gasUsed: bigint;
+  gasCostWei: bigint;
+  txHash: string;
+  blockNumber: bigint;
+}
+
+/**
+ * Verify swap execution quality by comparing predicted vs actual output
+ * @param txHash - Transaction hash of the executed swap
+ * @param predictedOutput - The output amount from the pre-trade quote
+ * @param tokenOutDecimals - Decimals of the output token
+ */
+async function verifyExecution(
+  txHash: `0x${string}`,
+  predictedOutput: bigint,
+  tokenOutDecimals: number
+): Promise<ExecutionVerification> {
+  // Get transaction receipt
+  const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+  
+  // Parse Swap events from the receipt
+  let actualOutput = 0n;
+  
+  for (const log of receipt.logs) {
+    try {
+      const decoded = decodeEventLog({
+        abi: V3_POOL_ABI,
+        data: log.data,
+        topics: log.topics,
+      });
+      
+      if (decoded.eventName === 'Swap') {
+        // amount0 and amount1 are signed - negative means tokens left the pool
+        const amount0 = decoded.args.amount0 as bigint;
+        const amount1 = decoded.args.amount1 as bigint;
+        
+        // The output is the negative value (tokens leaving pool to user)
+        actualOutput = amount0 < 0n ? -amount0 : -amount1;
+        break;
+      }
+    } catch {
+      // Not a Swap event, continue
+    }
+  }
+
+  // Calculate execution quality
+  const qualityBps = Number((actualOutput * 10000n) / predictedOutput);
+  const executionQuality = qualityBps / 100;
+
+  // Determine rating
+  let rating: ExecutionVerification['rating'];
+  if (executionQuality >= 99) {
+    rating = 'Excellent';
+  } else if (executionQuality >= 97) {
+    rating = 'Good';
+  } else if (executionQuality >= 95) {
+    rating = 'Acceptable';
+  } else {
+    rating = 'Review Required';
+  }
+
+  // Calculate gas cost
+  const gasCostWei = receipt.gasUsed * receipt.effectiveGasPrice;
+
+  return {
+    predictedOutput,
+    actualOutput,
+    executionQuality,
+    rating,
+    gasUsed: receipt.gasUsed,
+    gasCostWei,
+    txHash,
+    blockNumber: receipt.blockNumber,
+  };
+}
+
+// Example usage:
+async function exampleVerification() {
+  const txHash = '0x...'; // Your transaction hash
+  const predictedOutput = parseUnits('2.5', 18); // 2.5 ETH predicted
+  
+  const verification = await verifyExecution(
+    txHash as `0x${string}`,
+    predictedOutput,
+    18
+  );
+  
+  console.log('Execution Verification:');
+  console.log(`  Predicted: ${formatUnits(verification.predictedOutput, 18)} ETH`);
+  console.log(`  Actual: ${formatUnits(verification.actualOutput, 18)} ETH`);
+  console.log(`  Quality: ${verification.executionQuality.toFixed(2)}%`);
+  console.log(`  Rating: ${verification.rating}`);
+  console.log(`  Gas used: ${verification.gasUsed.toString()}`);
+}
+```
+
+---
+
+## Complete Workflow Example
+
+```typescript
+import { createPublicClient, createWalletClient, http, parseUnits, formatUnits } from 'viem';
+import { base } from 'viem/chains';
+
+/**
+ * Complete trade execution workflow
+ * 1. Get quotes from all fee tiers
+ * 2. Select best route
+ * 3. Execute swap
+ * 4. Verify execution quality
+ */
+async function executeTrade(
+  walletClient: any,
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: bigint,
+  tokenInDecimals: number,
+  tokenOutDecimals: number
+) {
+  console.log('=== Starting Trade Execution ===\n');
+
+  // Step 1: Find best route
+  console.log('Step 1: Analyzing routes...');
+  const { routes, best } = await findBestRoute(tokenIn, tokenOut, amountIn);
+  
+  if (!best) {
+    throw new Error('No liquidity found for this token pair');
+  }
+  
+  console.log(`Found ${routes.length} routes:`);
+  for (const route of routes) {
+    console.log(`  ${route.feeLabel}: ${formatUnits(route.amountOut, tokenOutDecimals)}`);
+  }
+  console.log(`\nBest route: ${best.feeLabel} pool`);
+  console.log(`Expected output: ${formatUnits(best.amountOut, tokenOutDecimals)}\n`);
+
+  // Step 2: Store pre-trade analysis for compliance
+  const preTradeAnalysis = {
+    timestamp: new Date().toISOString(),
+    tokenIn,
+    tokenOut,
+    amountIn: amountIn.toString(),
+    routesAnalyzed: routes.map(r => ({
+      fee: r.fee,
+      feeLabel: r.feeLabel,
+      amountOut: r.amountOut.toString(),
+    })),
+    recommendedRoute: best.fee,
+    predictedOutput: best.amountOut.toString(),
+  };
+
+  // Step 3: Execute swap
+  console.log('Step 2: Executing swap...');
+  const { txHash, receipt } = await executeSwapV3(walletClient, {
+    tokenIn,
+    tokenOut,
+    fee: best.fee,
+    amountIn,
+    amountOutMinimum: best.amountOut,
+    recipient: walletClient.account.address,
+    slippageTolerance: 0.5,
+  });
+  
+  console.log(`Transaction submitted: ${txHash}`);
+  console.log(`Block: ${receipt.blockNumber}\n`);
+
+  // Step 4: Verify execution
+  console.log('Step 3: Verifying execution...');
+  const verification = await verifyExecution(
+    txHash as `0x${string}`,
+    best.amountOut,
+    tokenOutDecimals
+  );
+  
+  console.log('Execution Verification:');
+  console.log(`  Predicted: ${formatUnits(verification.predictedOutput, tokenOutDecimals)}`);
+  console.log(`  Actual: ${formatUnits(verification.actualOutput, tokenOutDecimals)}`);
+  console.log(`  Quality: ${verification.executionQuality.toFixed(2)}%`);
+  console.log(`  Rating: ${verification.rating}\n`);
+
+  // Step 5: Generate compliance report
+  const complianceReport = {
+    tradeId: crypto.randomUUID(),
+    ...preTradeAnalysis,
+    execution: {
+      txHash,
+      blockNumber: receipt.blockNumber.toString(),
+      actualOutput: verification.actualOutput.toString(),
+      gasUsed: verification.gasUsed.toString(),
+      gasCostWei: verification.gasCostWei.toString(),
+    },
+    verification: {
+      executionQuality: verification.executionQuality,
+      rating: verification.rating,
+    },
+    complianceStatement: `Best execution achieved via Uniswap V3 ${best.feeLabel} pool. ` +
+      `Analysis evaluated ${routes.length} routing options. ` +
+      `Execution quality: ${verification.executionQuality.toFixed(2)}% (${verification.rating}).`,
+  };
+
+  console.log('=== Compliance Report Generated ===');
+  console.log(JSON.stringify(complianceReport, null, 2));
+
+  return complianceReport;
+}
+```
+
+---
+
+## Testing Script (No Wallet Required)
+
+This script tests the quote functionality without needing a wallet:
+
+```typescript
+// test-quotes.ts
+// Run with: npx ts-node test-quotes.ts
+
+import { createPublicClient, http, parseUnits, formatUnits } from 'viem';
+import { base } from 'viem/chains';
+
+const publicClient = createPublicClient({
+  chain: base,
+  transport: http('https://mainnet.base.org'),
+});
+
+const QUOTER_V2 = '0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a';
+const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+const WETH = '0x4200000000000000000000000000000000000006';
+
+const QUOTER_V2_ABI = [
+  {
+    inputs: [
+      {
+        components: [
+          { name: 'tokenIn', type: 'address' },
+          { name: 'tokenOut', type: 'address' },
+          { name: 'amountIn', type: 'uint256' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'sqrtPriceLimitX96', type: 'uint160' },
+        ],
+        name: 'params',
+        type: 'tuple',
+      },
+    ],
+    name: 'quoteExactInputSingle',
+    outputs: [
+      { name: 'amountOut', type: 'uint256' },
+      { name: 'sqrtPriceX96After', type: 'uint160' },
+      { name: 'initializedTicksCrossed', type: 'uint32' },
+      { name: 'gasEstimate', type: 'uint256' },
+    ],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const;
+
+async function main() {
+  console.log('Testing Uniswap V3 QuoterV2 on Base L2...\n');
+
+  const amountIn = parseUnits('1000', 6); // 1000 USDC
+  const feeTiers = [100, 500, 3000, 10000];
+
+  console.log(`Input: 1000 USDC`);
+  console.log(`Output: ETH\n`);
+  console.log('Querying all fee tiers...\n');
+
+  for (const fee of feeTiers) {
+    try {
+      const result = await publicClient.readContract({
+        address: QUOTER_V2 as `0x${string}`,
+        abi: QUOTER_V2_ABI,
+        functionName: 'quoteExactInputSingle',
+        args: [{
+          tokenIn: USDC as `0x${string}`,
+          tokenOut: WETH as `0x${string}`,
+          amountIn,
+          fee,
+          sqrtPriceLimitX96: 0n,
+        }],
+      });
+
+      const feePercent = fee / 10000;
+      console.log(`Fee tier ${feePercent}%:`);
+      console.log(`  Output: ${formatUnits(result[0], 18)} ETH`);
+      console.log(`  Gas estimate: ${result[3].toString()}`);
+      console.log('');
+    } catch (error) {
+      console.log(`Fee tier ${fee / 10000}%: No pool or insufficient liquidity\n`);
+    }
+  }
+
+  console.log('✅ Quote test complete!');
+}
+
+main().catch(console.error);
+```
+
+---
+
+## Dependencies
+
+```json
+{
+  "dependencies": {
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "ts-node": "^10.0.0"
+  }
+}
+```
+
+If using wagmi for browser wallet integration:
+```json
+{
+  "dependencies": {
+    "viem": "^2.0.0",
+    "wagmi": "^2.0.0",
+    "@web3modal/wagmi": "^4.0.0"
+  }
+}
+```
+
+---
+
+## Key Points Summary
+
+1. **Use V3 for MVP** - More liquidity, simpler integration
+2. **QuoterV2 for quotes** - Use `readContract` (it's a static call simulation)
+3. **SwapRouter02 for swaps** - Direct `exactInputSingle` call
+4. **Always check allowance** before swap, approve if needed
+5. **Parse Swap events** from receipt to verify actual output
+6. **Calculate execution quality** as `(actual / predicted) * 100%`
+7. **Store compliance report** with pre-trade analysis + post-trade verification
+
+---
+
+## Links
+
+- [Uniswap V3 Base Deployments](https://docs.uniswap.org/contracts/v3/reference/deployments/base-deployments)
+- [Uniswap V4 Deployments](https://docs.uniswap.org/contracts/v4/deployments)
+- [BaseScan Explorer](https://basescan.org)
+- [Viem Documentation](https://viem.sh)
+- [Wagmi Documentation](https://wagmi.sh)
