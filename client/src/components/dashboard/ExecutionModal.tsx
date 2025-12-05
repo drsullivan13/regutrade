@@ -243,21 +243,53 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
     if (!analysisData || !routeToExecute) return;
 
     const walletAddr = address || "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
+    
+    // Get the predicted output from the quote (what we expected)
+    const predictedOutput = routeToExecute.predictedOutput || routeToExecute.outputRaw || routeToExecute.output.split(" ")[0];
+    
+    // For demo mode, simulate a small variance (actual slightly differs from predicted)
+    // In live mode, this would be the real execution result
+    const predictedValue = parseFloat(predictedOutput);
+    // Demo mode: simulate 0.01-0.05% variance (realistic for Base L2)
+    const variancePercent = (Math.random() * 0.04 + 0.01) * (Math.random() > 0.5 ? 1 : -1);
+    const actualOutput = executionMode === "demo" 
+      ? (predictedValue * (1 + variancePercent / 100)).toFixed(18).replace(/\.?0+$/, '')
+      : predictedOutput; // Live mode would use actual execution result
+    
+    // Calculate effective rate from actual quote data
+    const amountIn = parseFloat(analysisData.amountIn);
+    const amountOut = parseFloat(actualOutput);
+    const effectiveRate = amountOut > 0 ? (amountIn / amountOut).toFixed(2) : "0";
+    
+    // Calculate quality score based on price impact (clamp between 0-100)
+    // Remove % sign and handle negative values properly
+    const priceImpactStr = routeToExecute.priceImpact?.replace('%', '').replace('-', '') || '0';
+    const priceImpactValue = parseFloat(priceImpactStr);
+    // Lower price impact = higher quality score
+    // 0% impact = 100 score, 1% impact = 90 score, etc.
+    const rawScore = 100 - (priceImpactValue * 10);
+    const qualityScore = Math.min(100, Math.max(0, rawScore)).toFixed(2);
+    
+    const qualityScoreNum = parseFloat(qualityScore);
+    const executionQuality = qualityScoreNum >= 99 ? "Excellent" 
+      : qualityScoreNum >= 95 ? "Good" 
+      : qualityScoreNum >= 90 ? "Fair" 
+      : "Poor";
 
     const tradeData = {
       tradeId: `TR-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
       pairFrom: analysisData.pairFrom,
       pairTo: analysisData.pairTo,
       amountIn: analysisData.amountIn,
-      amountOut: routeToExecute.outputRaw || routeToExecute.output.split(" ")[0],
+      amountOut: actualOutput,
       type: "buy",
-      route: routeToExecute.routeString || routeToExecute.name,
-      effectiveRate: "1842.15",
+      route: routeToExecute.routeString || routeToExecute.route || routeToExecute.name,
+      effectiveRate,
       gasCost: routeToExecute.gas,
-      gasUsed: routeToExecute.gasRaw || "145203",
-      executionQuality: "Excellent",
-      qualityScore: "99.48",
-      predictedOutput: routeToExecute.predictedOutput || routeToExecute.output.split(" ")[0],
+      gasUsed: routeToExecute.gasRaw || "21000",
+      executionQuality,
+      qualityScore,
+      predictedOutput: predictedOutput,
       priceImpact: routeToExecute.priceImpact,
       transactionHash: transactionHash,
       walletAddress: walletAddr,
@@ -303,7 +335,12 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
 
   const handleViewReport = () => {
     onOpenChange(false);
-    setLocation("/analysis");
+    // Navigate to the specific trade analysis page
+    if (tradeId) {
+      setLocation(`/analysis/${tradeId}`);
+    } else {
+      setLocation("/analysis");
+    }
   };
 
   // Wallet not connected

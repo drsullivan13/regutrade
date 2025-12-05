@@ -8,6 +8,18 @@ import { Separator } from "@/components/ui/separator";
 import { useLocation, useParams } from "wouter";
 import { downloadComplianceReport, type TradeData } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
+import { useAccount } from "wagmi";
+
+const DEMO_TRADES_KEY = "defi-compliance-demo-trades";
+
+function getDemoTradeIds(): string[] {
+  try {
+    const stored = sessionStorage.getItem(DEMO_TRADES_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
 
 interface Trade {
   id: number;
@@ -37,11 +49,36 @@ interface Trade {
 export default function Analysis() {
   const [, setLocation] = useLocation();
   const params = useParams<{ tradeId?: string }>();
+  const { address, isConnected } = useAccount();
   
   const { data: trades, isLoading } = useQuery<Trade[]>({
-    queryKey: ["trades"],
+    queryKey: ["trades", address, isConnected, params.tradeId],
     queryFn: async () => {
-      const res = await fetch("/api/trades");
+      // If we have a specific trade ID, fetch just that trade by ID
+      if (params.tradeId) {
+        const demoIds = getDemoTradeIds();
+        // Include the specific trade ID in demo IDs if needed
+        const tradeIds = demoIds.includes(params.tradeId) ? demoIds : [...demoIds, params.tradeId];
+        const res = await fetch(`/api/trades?tradeIds=${tradeIds.join(',')}`);
+        if (!res.ok) throw new Error("Failed to fetch trades");
+        return res.json();
+      }
+      
+      // Otherwise use wallet/demo filtering
+      let url = "/api/trades";
+      
+      if (isConnected && address) {
+        url += `?walletAddress=${address}`;
+      } else {
+        const demoIds = getDemoTradeIds();
+        if (demoIds.length > 0) {
+          url += `?tradeIds=${demoIds.join(',')}`;
+        } else {
+          return [];
+        }
+      }
+      
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch trades");
       return res.json();
     },
