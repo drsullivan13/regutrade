@@ -173,7 +173,7 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
 
   // Trade Details
   addSection("TRADE DETAILS");
-  addRow("Trade Pair", `${trade.pairFrom || "N/A"} → ${trade.pairTo || "N/A"}`);
+  addRow("Trade Pair", `${trade.pairFrom || "N/A"} -> ${trade.pairTo || "N/A"}`);
   addRow("Trade Type", (trade.type || "buy").toUpperCase());
   addRow("Input Amount", `${safeFormatNumber(trade.amountIn)} ${trade.pairFrom || ""}`);
   addRow("Output Amount", `${safeFormatNumber(trade.amountOut)} ${trade.pairTo || ""}`, true);
@@ -189,7 +189,10 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
   addRow("Actual Output", `${safeFormatNumber(trade.amountOut)} ${trade.pairTo || ""}`, variance.positive);
   addRow("Variance", `${varianceSign}${variance.value}%`, variance.positive);
   addRow("Price Impact", trade.priceImpact || "0.00%");
-  addRow("Routing Strategy", trade.route || "Direct");
+  
+  // Clean routing strategy - replace Unicode arrows with ASCII
+  const cleanRoute = (trade.route || "Direct").replace(/→/g, "->").replace(/←/g, "<-");
+  addRow("Routing Strategy", cleanRoute);
 
   // Cost Analysis
   addSection("COST ANALYSIS");
