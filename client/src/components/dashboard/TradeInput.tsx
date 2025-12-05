@@ -30,13 +30,16 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
   const tokens = tokenData?.tokens || {
     USDC: { symbol: "USDC", name: "USD Coin" },
     WETH: { symbol: "WETH", name: "Wrapped Ether" },
+    ETH: { symbol: "ETH", name: "Ether" },
     DAI: { symbol: "DAI", name: "Dai Stablecoin" },
     USDbC: { symbol: "USDbC", name: "USD Base Coin" },
     cbETH: { symbol: "cbETH", name: "Coinbase Staked ETH" },
+    LINK: { symbol: "LINK", name: "Chainlink" },
+    AAVE: { symbol: "AAVE", name: "Aave" },
   };
 
-  const sellTokens = ["USDC", "DAI", "USDbC", "WETH"];
-  const buyTokens = ["WETH", "cbETH", "USDC"];
+  const sellTokens = ["USDC", "DAI", "USDbC", "WETH", "ETH"];
+  const buyTokens = ["WETH", "ETH", "cbETH", "USDC", "LINK", "AAVE"];
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
