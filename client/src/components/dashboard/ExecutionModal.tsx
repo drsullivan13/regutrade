@@ -84,7 +84,12 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
   }, [isOpen]);
 
   // Demo mode execution (simulated)
-  const executeDemoMode = useCallback(async () => {
+  const executeDemoMode = async () => {
+    if (!analysisData || !routeToExecute) {
+      setError("Missing trade data");
+      return;
+    }
+    
     setIsProcessing(true);
     setSteps(steps.map((s, i) => ({ ...s, status: i === 0 ? "active" : "pending" })));
     
@@ -103,9 +108,11 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
     const simulatedBlock = BigInt(Math.floor(Date.now() / 1000));
     setTxHash(simulatedHash);
     setBlockNumber(simulatedBlock);
-    await createTrade(simulatedHash, simulatedBlock);
+    
+    // Create and save the trade
+    await createTradeRecord(simulatedHash, simulatedBlock);
     setIsProcessing(false);
-  }, []);
+  };
 
   // Live mode execution (real on-chain)
   const executeLiveMode = useCallback(async () => {
@@ -206,7 +213,7 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
         );
 
         // Create trade record with real on-chain data
-        await createTrade(swapHash, swapReceipt.blockNumber);
+        await createTradeRecord(swapHash, swapReceipt.blockNumber);
 
       } catch (txError: any) {
         console.error("Transaction error:", txError);
@@ -239,7 +246,7 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
     }
   }, [address, analysisData, routeToExecute, sendTransactionAsync, publicClient]);
 
-  const createTrade = async (transactionHash: `0x${string}`, confirmedBlockNumber?: bigint) => {
+  const createTradeRecord = async (transactionHash: `0x${string}`, confirmedBlockNumber?: bigint) => {
     if (!analysisData || !routeToExecute) return;
 
     const walletAddr = address || "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
