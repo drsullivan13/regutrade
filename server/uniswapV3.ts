@@ -84,12 +84,14 @@ export interface RouteQuote {
 /**
  * Get a quote for swapping tokens using V3 QuoterV2
  * This is a read-only call that simulates the swap to get the output amount
+ * Includes retry logic for RPC rate limiting
  */
 export async function getQuoteV3(
   tokenIn: string,
   tokenOut: string,
   amountIn: bigint,
-  fee: FeeTier
+  fee: FeeTier,
+  retryCount = 0
 ): Promise<QuoteResult> {
   try {
     const result = await publicClient.readContract({
@@ -111,8 +113,19 @@ export async function getQuoteV3(
       initializedTicksCrossed: result[2],
       gasEstimate: result[3],
     };
-  } catch (error) {
-    // Pool doesn't exist or has no liquidity for this fee tier
+  } catch (error: any) {
+    // Check if this is a rate limit / network error (not a contract revert)
+    const errorMsg = error?.message || String(error);
+    const isRateLimitError = !errorMsg.includes('execution reverted') && 
+                             !errorMsg.includes('0x') &&
+                             retryCount < 1; // Only retry once
+    
+    if (isRateLimitError) {
+      // Quick retry after 50ms delay
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return getQuoteV3(tokenIn, tokenOut, amountIn, fee, retryCount + 1);
+    }
+    
     throw error;
   }
 }
@@ -184,9 +197,14 @@ export async function findBestRoute(
 
   const routes: RouteQuote[] = [];
 
-  // Query all fee tiers in parallel
-  const quotePromises = V3_FEE_TIERS.map(async (fee) => {
+  // Query all fee tiers with slight stagger to avoid RPC rate limits
+  // Each call starts 25ms apart, keeping total time under 100ms for initial dispatch
+  const quotePromises = V3_FEE_TIERS.map(async (fee, index) => {
     try {
+      // Stagger requests to avoid RPC rate limiting
+      if (index > 0) {
+        await new Promise(resolve => setTimeout(resolve, index * 25));
+      }
       const quote = await getQuoteV3(tokenInAddress, tokenOutAddress, amountIn, fee);
       
       // Calculate gas cost in USD
