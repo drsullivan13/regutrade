@@ -1,0 +1,1197 @@
+# Product Requirements Document: DeFi Trade Compliance Platform
+
+## Executive Summary
+
+**Product Name:** DeFi Trade Compliance Platform
+
+**Tagline:** "Institutional-grade trade execution with built-in compliance reporting"
+
+**Target User:** Institutional investors (hedge funds, RIAs, asset managers) using Anchorage Digital's Porto wallet with Uniswap integration
+
+**Core Problem:** 
+Institutional investors have regulatory obligations to achieve "best execution" on trades. Current DeFi platforms provide quotes but lack:
+1. Pre-trade analysis comparing all routing options
+2. Audit trail proving best execution was achieved
+3. Post-trade compliance reports for regulators
+4. Historical record of execution quality
+
+**Solution:** 
+A full-stack web application that provides the complete institutional trading workflow:
+- **Pre-Trade:** Compare all Uniswap routing options with detailed analysis
+- **Execute:** Connect wallet and execute trades on-chain via optimal route
+- **Post-Trade:** Generate compliance reports comparing predicted vs. actual execution
+- **History:** Store all trade analyses and reports in Supabase for audit review
+
+**Technical Approach:**
+- Use Base L2 (Ethereum Layer 2) for low-cost execution (~$0.50/trade)
+- Integrate Uniswap Labs API for routing analysis
+- Use wagmi + Web3Modal for wallet connection
+- Store compliance reports in Supabase
+- Deploy on Vercel
+
+**Success Metrics:**
+- User can analyze institutional-scale trades (500k+ USDC)
+- User can execute small test trades ($5-10) to prove concept works
+- Post-trade analysis shows execution quality vs. prediction
+- Compliance reports are stored and retrievable
+- Demo completes in under 3 minutes
+
+---
+
+## Problem Statement
+
+### Context
+Anchorage Digital's Porto product provides institutional self-custody with native Uniswap integration. Institutions can now trade on-chain while maintaining custody, but face critical gaps:
+
+**Gap 1: No Pre-Trade Comparison**
+- Institutions see one quote but don't know if it's optimal
+- No visibility into V2 vs V3 vs V4 vs UniswapX differences
+- Can't document why they chose a particular route
+
+**Gap 2: No Post-Trade Audit Trail**
+- After execution, no record of what alternatives were available
+- Can't prove to regulators they achieved best execution
+- No systematic way to track execution quality over time
+
+**Gap 3: No Compliance Documentation**
+- Regulators require proof of best execution
+- Manual documentation is time-consuming and error-prone
+- No standardized reporting format for DeFi trades
+
+### Regulatory Context
+SEC-registered investment advisors have a fiduciary duty to seek best execution (SEC Rule 606, Rule 15c3-3). This means:
+- They must evaluate available execution venues
+- They must document their decision rationale
+- They must demonstrate they minimized costs for clients
+- They must maintain records for regulatory inspection
+
+**Current State:** DeFi has no tooling for this. Institutions are flying blind.
+
+**Our Opportunity:** Build the Bloomberg Terminal of DeFi execution - analysis, execution, compliance in one platform.
+
+---
+
+## User Stories
+
+### Primary User: Institutional Trader
+**As a** trader at a hedge fund using Anchorage Porto  
+**I want to** analyze routing options, execute trades, and automatically generate compliance documentation  
+**So that** I can trade efficiently while meeting regulatory obligations
+
+**Acceptance Criteria:**
+- I can input a large institutional trade (500k USDC → WBTC) and see all routing options
+- I can execute a small test trade ($10) to verify the route works
+- System automatically generates a compliance report comparing predicted vs actual execution
+- I can review my historical trades and their execution quality
+
+### Secondary User: Compliance Officer
+**As a** compliance officer reviewing trading activity  
+**I want to** access historical trade analyses and execution quality reports  
+**So that** I can demonstrate to regulators that we achieved best execution
+
+**Acceptance Criteria:**
+- I can view all trades executed through the platform
+- Each trade has a compliance report showing pre-trade analysis and post-trade results
+- Reports are exportable for auditor review
+- I can filter trades by date, execution quality, or token pair
+
+### Tertiary User: Anchorage Sales Team
+**As a** salesperson at Anchorage Digital  
+**I want to** demo how Porto + this tool provides institutional-grade execution  
+**So that** I can win deals with RIAs and hedge funds
+
+**Acceptance Criteria:**
+- Demo takes under 3 minutes
+- Shows real blockchain execution (not simulation)
+- UI is professional enough to show compliance officers
+- Clearly demonstrates regulatory value proposition
+
+---
+
+## Functional Requirements
+
+### FR1: Pre-Trade Analysis (P0 - Must Have)
+
+The system shall provide pre-trade routing analysis:
+
+**Inputs:**
+- Token pair (from dropdown: USDC/ETH, USDC/WBTC, DAI/ETH, USDT/ETH)
+- Amount in human-readable format (e.g., "500000" for 500k USDC)
+- Chain: Base L2 (chainId: 8453)
+
+**Analysis Provided:**
+- Query all available Uniswap protocols (V2, V3, V4, UniswapX)
+- For each route, display:
+  - Estimated output amount
+  - Price impact %
+  - Gas cost estimate (in USD)
+  - Net output (output value - gas cost)
+  - Execution time estimate
+- Recommend optimal route based on highest net output
+
+**UI Components:**
+- Trade input form with token pair selector and amount input
+- Route comparison table (sortable, with recommended route highlighted)
+- "Analyze Trade" button (loading state while fetching quotes)
+
+**Technical Notes:**
+- Use Uniswap Labs API `/quote` endpoint
+- Make multiple calls with different `protocols` parameters
+- Handle cases where protocols don't have liquidity
+- Store analysis results in React state for use in post-trade comparison
+
+### FR2: Wallet Connection (P0 - Must Have)
+
+The system shall enable users to connect their Web3 wallet:
+
+**Supported Wallets:**
+- MetaMask
+- WalletConnect (for mobile wallets)
+- Coinbase Wallet
+
+**Wallet Connection Flow:**
+1. User clicks "Connect Wallet"
+2. Web3Modal appears with wallet options
+3. User selects wallet and approves connection
+4. System verifies wallet is connected to Base L2
+5. Display connected address (truncated: 0x1234...5678)
+6. Show wallet balance for input token
+
+**Error Handling:**
+- If wrong network, prompt user to switch to Base L2
+- If no wallet detected, show installation instructions
+- Handle wallet connection rejection gracefully
+
+**Technical Notes:**
+- Use wagmi + Web3Modal for wallet integration
+- Check wallet.chainId === 8453 (Base)
+- Use wagmi hooks: useAccount, useNetwork, useBalance
+
+### FR3: Trade Execution (P0 - Must Have)
+
+The system shall execute trades on Base L2:
+
+**Execution Flow:**
+1. User reviews pre-trade analysis
+2. User clicks "Execute Trade" on recommended route
+3. System prompts for token approval (if needed)
+4. User approves spending limit
+5. System calls Uniswap `/swap` API endpoint to get transaction calldata
+6. User signs and submits transaction
+7. System monitors transaction status
+8. Display confirmation when transaction is mined
+
+**Transaction Monitoring:**
+- Show transaction hash (link to BaseScan explorer)
+- Show pending/confirmed status
+- Display actual output amount received
+- Display actual gas cost paid
+
+**Amount Flexibility:**
+- Allow user to override amount before execution
+- Recommend small test amount ($5-10) for demo purposes
+- Support full institutional amounts if user wants
+
+**Technical Notes:**
+- Use Uniswap Labs API `/swap` endpoint
+- Use wagmi's useSendTransaction hook
+- Use wagmi's useWaitForTransaction for confirmation
+- Parse transaction receipt for actual output amount
+
+### FR4: Post-Trade Analysis (P0 - Must Have)
+
+The system shall compare predicted vs. actual execution:
+
+**Comparison Metrics:**
+- **Predicted Output:** From pre-trade analysis
+- **Actual Output:** From transaction receipt
+- **Execution Quality:** (actual / predicted) * 100%
+- **Predicted Gas:** From pre-trade analysis
+- **Actual Gas:** From transaction receipt
+- **Total Cost Variance:** Difference in USD
+
+**Execution Quality Rating:**
+- 99%+ = "Excellent"
+- 97-99% = "Good"
+- 95-97% = "Acceptable"
+- <95% = "Review Required"
+
+**UI Display:**
+- Side-by-side comparison table
+- Visual indicator (green checkmark for excellent, yellow for review)
+- Explanation of any significant variance
+
+**Technical Notes:**
+- Store pre-trade analysis in state when generated
+- After transaction confirmation, fetch transaction receipt
+- Parse receipt for gas used and output amount
+- Calculate metrics and store in Supabase
+
+### FR5: Compliance Report Generation (P0 - Must Have)
+
+The system shall generate audit-ready compliance reports:
+
+**Report Contents:**
+- **Trade Summary:**
+  - Timestamp
+  - Token pair
+  - Input amount
+  - Wallet address
+  - Transaction hash (link to explorer)
+  
+- **Pre-Trade Analysis:**
+  - Routes evaluated (list all protocols)
+  - Recommended route and rationale
+  - Expected output and costs
+  
+- **Execution Details:**
+  - Route executed
+  - Actual output received
+  - Actual gas cost
+  - Execution quality score
+  
+- **Compliance Statement:**
+  - "Best execution achieved via [route]"
+  - "Analysis evaluated [N] routing options"
+  - "Recommended route provided [X]% execution quality"
+
+**Report Formats:**
+- View in UI (formatted HTML)
+- Download as PDF (future enhancement)
+- Export as JSON for programmatic access
+
+**Technical Notes:**
+- Generate report after post-trade analysis completes
+- Store in Supabase with trade record
+- Allow retrieval by trade ID or date range
+
+### FR6: Trade History & Storage (P0 - Must Have)
+
+The system shall maintain historical record of all analyses and executions:
+
+**Supabase Schema:**
+
+```sql
+-- Trades table
+CREATE TABLE trades (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  wallet_address TEXT NOT NULL,
+  
+  -- Trade details
+  token_in_symbol TEXT NOT NULL,
+  token_in_address TEXT NOT NULL,
+  token_out_symbol TEXT NOT NULL,
+  token_out_address TEXT NOT NULL,
+  amount_in TEXT NOT NULL,
+  chain_id INTEGER NOT NULL,
+  
+  -- Pre-trade analysis
+  predicted_output TEXT NOT NULL,
+  predicted_gas_usd NUMERIC NOT NULL,
+  recommended_route TEXT NOT NULL,
+  routes_analyzed JSONB NOT NULL,
+  
+  -- Execution details (null until executed)
+  executed_at TIMESTAMPTZ,
+  tx_hash TEXT,
+  actual_output TEXT,
+  actual_gas_usd NUMERIC,
+  route_used TEXT,
+  
+  -- Calculated metrics
+  execution_quality NUMERIC,
+  execution_quality_rating TEXT,
+  
+  -- Compliance
+  compliance_report JSONB,
+  
+  INDEX idx_wallet (wallet_address),
+  INDEX idx_created (created_at DESC),
+  INDEX idx_executed (executed_at DESC)
+);
+```
+
+**Operations:**
+- **Create:** Save trade after pre-trade analysis
+- **Update:** Update with execution details after transaction confirms
+- **Read:** Fetch trade history for connected wallet
+- **List:** Show recent trades with filters
+
+**UI Features:**
+- Trade history table showing recent trades
+- Click trade to view full compliance report
+- Filter by date range, token pair, execution quality
+- Sort by timestamp, execution quality, amount
+
+**Privacy:**
+- Only show trades for connected wallet address
+- No cross-wallet visibility
+
+**Technical Notes:**
+- Use Supabase JavaScript client
+- Implement Row Level Security (RLS) based on wallet address
+- Use Supabase real-time subscriptions for live updates (optional)
+
+### FR7: Token Pair Presets (P0 - Must Have)
+
+The system shall support these preset token pairs on Base L2:
+
+```javascript
+const TOKEN_PAIRS_BASE = [
+  { 
+    from: "USDC", 
+    to: "ETH",
+    fromAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    toAddress: "0x4200000000000000000000000000000000000006"
+  },
+  { 
+    from: "USDC", 
+    to: "WBTC",
+    fromAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    toAddress: "0x... (Base WBTC address)"
+  },
+  { 
+    from: "DAI", 
+    to: "ETH",
+    fromAddress: "0x... (Base DAI address)",
+    toAddress: "0x4200000000000000000000000000000000000006"
+  },
+  { 
+    from: "USDT", 
+    to: "ETH",
+    fromAddress: "0x... (Base USDT address)",
+    toAddress: "0x4200000000000000000000000000000000000006"
+  }
+];
+```
+
+**Note:** Verify token addresses on Base L2 before implementation. These may differ from Ethereum mainnet.
+
+---
+
+## Technical Requirements
+
+### TR1: Technology Stack
+
+**Frontend:**
+- React 18 with Vite
+- TailwindCSS for styling
+- wagmi for Web3 integration
+- Web3Modal for wallet connection UI
+- viem for Ethereum interactions
+- Supabase JavaScript client
+
+**Backend:**
+- Node.js 18+ with Express (for API proxying)
+- Supabase for database (PostgreSQL)
+- Vercel serverless functions
+
+**Blockchain:**
+- Base L2 (chainId: 8453)
+- Uniswap V2/V3/V4/X protocols
+- Uniswap Labs API for routing
+
+**Deployment:**
+- Frontend: Vercel
+- Backend API: Vercel serverless functions
+- Database: Supabase hosted PostgreSQL
+
+### TR2: Base L2 Integration
+
+**Why Base L2:**
+- Gas costs: ~$0.10-0.50 per transaction (vs $15-50 on mainnet)
+- Fast finality: 2 second blocks
+- Uniswap V2/V3 deployed and liquid
+- EVM-compatible (same code as mainnet)
+- Supported by Uniswap Labs API
+
+**Network Configuration:**
+```javascript
+const BASE_MAINNET = {
+  id: 8453,
+  name: 'Base',
+  network: 'base',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://mainnet.base.org'] },
+    public: { http: ['https://mainnet.base.org'] },
+  },
+  blockExplorers: {
+    default: { name: 'BaseScan', url: 'https://basescan.org' },
+  },
+}
+```
+
+**Uniswap Contracts on Base:**
+- Verify contract addresses before deployment
+- May need to query Uniswap docs for Base-specific deployments
+
+### TR3: Uniswap Labs API Integration
+
+**Endpoints Used:**
+
+1. **Quote Endpoint:** `POST https://api.uniswap.org/v1/quote`
+   ```json
+   {
+     "tokenIn": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+     "tokenOut": "0x4200000000000000000000000000000000000006",
+     "amount": "500000000000",
+     "type": "EXACT_INPUT",
+     "slippageTolerance": "0.5",
+     "protocols": ["v2", "v3"],
+     "chainId": 8453
+   }
+   ```
+
+2. **Swap Endpoint:** `POST https://api.uniswap.org/v1/swap`
+   ```json
+   {
+     "tokenIn": "0x...",
+     "tokenOut": "0x...",
+     "amount": "10000000",
+     "type": "EXACT_INPUT",
+     "slippageTolerance": "0.5",
+     "recipient": "0x...",
+     "protocols": ["v3"],
+     "chainId": 8453
+   }
+   ```
+   Returns transaction calldata ready to submit.
+
+**Authentication:**
+- API Key in header: `x-api-key: YOUR_KEY`
+- Get key from hub.uniswap.org
+
+**Rate Limits:**
+- Unknown (likely generous for quote endpoint)
+- Implement client-side debouncing for analysis requests
+
+### TR4: Web3 Integration (wagmi)
+
+**Wallet Connection:**
+```typescript
+import { WagmiConfig, createConfig } from 'wagmi'
+import { base } from 'wagmi/chains'
+import { Web3Modal } from '@web3modal/react'
+
+const config = createConfig({
+  chains: [base],
+  // ... providers, etc
+})
+```
+
+**Key Hooks:**
+- `useAccount()` - Get connected wallet address
+- `useNetwork()` - Verify user is on Base L2
+- `useSwitchNetwork()` - Prompt network switch if needed
+- `useBalance()` - Check token balances
+- `useContractWrite()` - Execute token approval
+- `useSendTransaction()` - Submit swap transaction
+- `useWaitForTransaction()` - Wait for confirmation
+
+**Token Approval Pattern:**
+```typescript
+// 1. Check if approval needed
+const allowance = await readContract({
+  address: tokenAddress,
+  abi: erc20ABI,
+  functionName: 'allowance',
+  args: [userAddress, uniswapRouterAddress]
+})
+
+// 2. If needed, request approval
+if (allowance < amount) {
+  await writeContract({
+    address: tokenAddress,
+    abi: erc20ABI,
+    functionName: 'approve',
+    args: [uniswapRouterAddress, maxUint256]
+  })
+}
+
+// 3. Execute swap
+await sendTransaction({
+  to: swapRouterAddress,
+  data: calldataFromUniswapAPI
+})
+```
+
+### TR5: Supabase Integration
+
+**Setup:**
+1. Create Supabase project at supabase.com
+2. Run schema migration (trades table)
+3. Enable Row Level Security (RLS)
+4. Generate API keys
+
+**RLS Policy:**
+```sql
+-- Users can only read their own trades
+CREATE POLICY "Users can view own trades"
+  ON trades FOR SELECT
+  USING (wallet_address = current_setting('request.jwt.claims')::json->>'wallet_address');
+
+-- Users can insert their own trades  
+CREATE POLICY "Users can insert own trades"
+  ON trades FOR INSERT
+  WITH CHECK (wallet_address = current_setting('request.jwt.claims')::json->>'wallet_address');
+
+-- Users can update their own trades
+CREATE POLICY "Users can update own trades"
+  ON trades FOR UPDATE
+  USING (wallet_address = current_setting('request.jwt.claims')::json->>'wallet_address');
+```
+
+**Note:** For MVP, we'll use wallet address as identifier (no JWT). In production, implement proper auth.
+
+**Client Usage:**
+```typescript
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.VITE_SUPABASE_ANON_KEY
+)
+
+// Create trade record
+const { data, error } = await supabase
+  .from('trades')
+  .insert({
+    wallet_address: address,
+    token_in_symbol: 'USDC',
+    amount_in: '500000',
+    predicted_output: '12.5234',
+    routes_analyzed: routesJSON
+  })
+  .select()
+
+// Update after execution
+await supabase
+  .from('trades')
+  .update({
+    executed_at: new Date().toISOString(),
+    tx_hash: receipt.transactionHash,
+    actual_output: parsedOutput,
+    execution_quality: quality
+  })
+  .eq('id', tradeId)
+
+// Fetch history
+const { data: trades } = await supabase
+  .from('trades')
+  .select('*')
+  .eq('wallet_address', address)
+  .order('created_at', { ascending: false })
+  .limit(20)
+```
+
+### TR6: Environment Variables
+
+**Frontend (.env):**
+```
+VITE_UNISWAP_API_KEY=<from hub.uniswap.org>
+VITE_SUPABASE_URL=<from supabase project>
+VITE_SUPABASE_ANON_KEY=<from supabase project>
+VITE_WALLETCONNECT_PROJECT_ID=<from walletconnect.com>
+```
+
+**Backend (.env):**
+```
+UNISWAP_API_KEY=<same as frontend>
+SUPABASE_URL=<same as frontend>
+SUPABASE_SERVICE_KEY=<service role key for backend>
+```
+
+---
+
+## Data Flow Architecture
+
+### Flow 1: Pre-Trade Analysis
+```
+User Input (token pair, amount)
+    ↓
+Frontend validates input
+    ↓
+Frontend → Backend API: /api/analyze-trade
+    ↓
+Backend → Uniswap API: Multiple /quote calls (v2, v3, v4, uniswapx)
+    ↓
+Backend aggregates routes, calculates best
+    ↓
+Backend → Frontend: Routes comparison data
+    ↓
+Frontend displays comparison table
+    ↓
+Frontend → Supabase: Save trade record (status: "analyzed")
+```
+
+### Flow 2: Trade Execution
+```
+User clicks "Execute Trade"
+    ↓
+Frontend checks wallet connection
+    ↓
+Frontend checks token approval
+    ↓
+If needed: Frontend → Wallet: Request token approval
+    ↓
+User approves in wallet
+    ↓
+Frontend → Uniswap API: /swap endpoint (get calldata)
+    ↓
+Frontend → Wallet: Send transaction with calldata
+    ↓
+User signs transaction
+    ↓
+Transaction submitted to Base L2
+    ↓
+Frontend monitors transaction status
+    ↓
+Transaction confirmed
+    ↓
+Frontend parses receipt for actual output & gas
+    ↓
+Frontend → Supabase: Update trade record (status: "executed")
+```
+
+### Flow 3: Post-Trade Analysis
+```
+Transaction confirmed
+    ↓
+Frontend retrieves pre-trade analysis from state/Supabase
+    ↓
+Frontend calculates execution quality metrics
+    ↓
+Frontend generates compliance report
+    ↓
+Frontend → Supabase: Update trade with compliance report
+    ↓
+Display post-trade analysis to user
+```
+
+### Flow 4: View History
+```
+User navigates to "Trade History"
+    ↓
+Frontend → Supabase: Query trades for wallet address
+    ↓
+Supabase returns trade records
+    ↓
+Frontend displays trades table
+    ↓
+User clicks on trade
+    ↓
+Frontend displays full trade details + compliance report
+```
+
+---
+
+## UI/UX Specifications
+
+### Page Structure
+
+**Layout:**
+```
+┌─────────────────────────────────────────────────┐
+│  Header: "DeFi Trade Compliance Platform"      │
+│  [Connect Wallet]  Connected: 0x1234...        │
+└─────────────────────────────────────────────────┘
+│ Navigation: [Analyze Trade] [Trade History]    │
+└─────────────────────────────────────────────────┘
+│                                                 │
+│  Main Content Area (changes per page)          │
+│                                                 │
+│                                                 │
+└─────────────────────────────────────────────────┘
+│  Footer: "Built for Anchorage Digital"         │
+└─────────────────────────────────────────────────┘
+```
+
+### Page 1: Analyze & Execute Trade
+
+**Section 1: Trade Input**
+```
+┌─────────────────────────────────────────────────┐
+│ Pre-Trade Analysis                              │
+├─────────────────────────────────────────────────┤
+│ Token Pair: [Dropdown: USDC → ETH]             │
+│ Amount:     [Input: 500000] USDC               │
+│ Chain:      Base L2                             │
+│                                                 │
+│ [Analyze Routes]                                │
+└─────────────────────────────────────────────────┘
+```
+
+**Section 2: Route Comparison** (appears after analysis)
+```
+┌─────────────────────────────────────────────────┐
+│ Route Comparison                                │
+├─────┬────────┬────────┬──────┬────────┬────────┤
+│Route│ Output │ Impact │ Gas  │  Net   │Execute │
+├─────┼────────┼────────┼──────┼────────┼────────┤
+│✓ V3 │125.234 │ 0.15% │ $0.50│$510,234│[Execute]│
+│UniX │125.198 │ 0.16% │ $0.45│$510,189│[Execute]│
+│V2   │124.891 │ 0.35% │ $0.40│$507,845│[Execute]│
+└─────┴────────┴────────┴──────┴────────┴────────┘
+```
+
+**Section 3: Execution Panel** (appears after clicking Execute)
+```
+┌─────────────────────────────────────────────────┐
+│ Execute Trade                                   │
+├─────────────────────────────────────────────────┤
+│ Route: Uniswap V3 (0.05% pool)                 │
+│ Input: 500,000 USDC                            │
+│ Expected Output: 125.234 ETH                   │
+│ Estimated Gas: $0.50                           │
+│                                                 │
+│ ⚠️  For demo, executing with $10 USDC          │
+│ Amount to swap: [Input: 10] USDC              │
+│                                                 │
+│ Wallet: Connected (0x1234...5678)             │
+│ Balance: 50.00 USDC ✓                         │
+│                                                 │
+│ Status: [⏳ Awaiting approval...]              │
+│         [✓ Approved]                           │
+│         [⏳ Sending transaction...]            │
+│         [⏳ Confirming...]                     │
+│         [✓ Transaction confirmed!]            │
+│                                                 │
+│ Tx: 0xabc123... [View on BaseScan]           │
+└─────────────────────────────────────────────────┘
+```
+
+**Section 4: Post-Trade Analysis** (appears after confirmation)
+```
+┌─────────────────────────────────────────────────┐
+│ Trade Execution Report                          │
+├─────────────────────────────────────────────────┤
+│ PRE-TRADE PREDICTION                           │
+│ • Expected Output: 0.002500 ETH                │
+│ • Expected Gas: $0.50                          │
+│ • Route: Uniswap V3                            │
+│                                                 │
+│ ACTUAL EXECUTION                                │
+│ • Actual Output: 0.002487 ETH                  │
+│ • Actual Gas: $0.52                            │
+│ • Route: Uniswap V3                            │
+│ • Tx: 0xabc123...                              │
+│                                                 │
+│ EXECUTION QUALITY: 99.48% ✓ Excellent         │
+│                                                 │
+│ [View Compliance Report] [Start New Trade]    │
+└─────────────────────────────────────────────────┘
+```
+
+### Page 2: Trade History
+
+```
+┌─────────────────────────────────────────────────┐
+│ Trade History                                   │
+│ Showing trades for: 0x1234...5678              │
+├──────┬──────┬────────┬────────┬──────┬────────┤
+│Date  │Pair  │ Amount │ Output │Quality│ Action │
+├──────┼──────┼────────┼────────┼──────┼────────┤
+│12/4  │USDC→E│ 10.00  │0.00248E│99.48%│[View]  │
+│12/4  │USDC→W│ 10.00  │0.00025W│98.92%│[View]  │
+│12/3  │DAI→E │ 10.00  │0.00247E│99.51%│[View]  │
+└──────┴──────┴────────┴────────┴──────┴────────┘
+```
+
+### Page 3: Compliance Report Detail
+
+```
+┌─────────────────────────────────────────────────┐
+│ COMPLIANCE REPORT                               │
+│ Trade ID: abc-123-def                          │
+├─────────────────────────────────────────────────┤
+│ TRADE SUMMARY                                   │
+│ Date: December 4, 2025 14:23:45 UTC           │
+│ Wallet: 0x1234...5678                          │
+│ Chain: Base L2                                  │
+│                                                 │
+│ Input: 10.00 USDC                              │
+│ Output: 0.002487 ETH                           │
+│ Transaction: 0xabc123... [BaseScan]           │
+│                                                 │
+│ PRE-TRADE ANALYSIS                              │
+│ Routes Evaluated: 3                             │
+│ • Uniswap V3: 0.002500 ETH (recommended)      │
+│ • UniswapX:   0.002498 ETH                     │
+│ • Uniswap V2: 0.002456 ETH                     │
+│                                                 │
+│ Recommended Route: Uniswap V3 (0.05% pool)    │
+│ Rationale: Highest net output after gas costs  │
+│                                                 │
+│ EXECUTION DETAILS                               │
+│ Route Used: Uniswap V3 (as recommended)       │
+│ Executed At: December 4, 2025 14:24:12 UTC    │
+│ Block: 12,345,678                              │
+│                                                 │
+│ EXECUTION QUALITY                               │
+│ Predicted Output: 0.002500 ETH                 │
+│ Actual Output:    0.002487 ETH                 │
+│ Quality Score:    99.48%                       │
+│ Rating:           ✓ Excellent                  │
+│                                                 │
+│ Variance: -0.52% due to market movement        │
+│          between analysis and execution         │
+│                                                 │
+│ COMPLIANCE STATEMENT                            │
+│ Best execution achieved via Uniswap V3.        │
+│ Analysis evaluated 3 routing options and       │
+│ recommended the route that maximized net       │
+│ output after costs. Actual execution achieved  │
+│ 99.48% of predicted output, which exceeds      │
+│ institutional standards for execution quality. │
+│                                                 │
+│ [Download PDF] [Export JSON] [Back to History]│
+└─────────────────────────────────────────────────┘
+```
+
+### Design System
+
+**Colors:**
+- Primary: `#2563eb` (blue-600) - Actions, links
+- Success: `#10b981` (green-500) - Excellent execution
+- Warning: `#f59e0b` (amber-500) - Acceptable execution
+- Danger: `#ef4444` (red-500) - Poor execution
+- Neutral: `#64748b` (slate-500) - Secondary text
+- Background: `#f8fafc` (slate-50)
+
+**Typography:**
+- Headers: Inter, 600 weight
+- Body: Inter, 400 weight
+- Monospace (addresses, hashes): 'Courier New'
+
+**Spacing:**
+- Card padding: 24px
+- Section margins: 24px
+- Component gaps: 16px
+
+**Components:**
+- Buttons: rounded-md, px-6 py-2
+- Inputs: rounded-md, px-4 py-2, border-gray-300
+- Cards: rounded-lg, shadow-md
+- Tables: fixed header, hover rows
+
+---
+
+## Implementation Timeline
+
+### Prerequisites (Do First)
+- [ ] Get Uniswap Labs API key from hub.uniswap.org
+- [ ] Create Supabase project and get credentials
+- [ ] Get WalletConnect project ID
+- [ ] Install MetaMask browser extension
+- [ ] Get ~$50 of USDC on Base L2 for testing
+- [ ] Get ~0.01 ETH on Base L2 for gas
+
+### Day 1: Friday (8 hours)
+
+**Morning (4 hours):**
+- [ ] Project setup (Vite + React + TailwindCSS)
+- [ ] Install dependencies (wagmi, web3modal, supabase-js, viem)
+- [ ] Configure Base L2 network
+- [ ] Set up environment variables
+- [ ] Create Supabase schema and RLS policies
+- [ ] Build token constants file with Base L2 addresses
+
+**Afternoon (4 hours):**
+- [ ] Build backend API endpoint for route analysis
+- [ ] Integrate Uniswap Labs `/quote` API
+- [ ] Test quote fetching for all protocols
+- [ ] Build frontend trade input form component
+- [ ] Build route comparison table component
+- [ ] Connect frontend to backend
+- [ ] Test end-to-end pre-trade analysis flow
+
+### Day 2: Saturday (8 hours)
+
+**Morning (4 hours):**
+- [ ] Set up wagmi configuration
+- [ ] Build wallet connection UI (Web3Modal)
+- [ ] Test wallet connection on Base L2
+- [ ] Implement network switching prompt if user on wrong chain
+- [ ] Build token approval flow
+- [ ] Test approval transaction
+
+**Afternoon (4 hours):**
+- [ ] Integrate Uniswap `/swap` API
+- [ ] Build transaction execution flow
+- [ ] Implement transaction monitoring
+- [ ] Parse transaction receipt for actual output
+- [ ] Build post-trade analysis logic
+- [ ] Test full execution flow with $10 trade
+
+### Day 3: Sunday (8 hours)
+
+**Morning (4 hours):**
+- [ ] Build Supabase integration
+- [ ] Implement save trade after analysis
+- [ ] Implement update trade after execution
+- [ ] Build trade history page
+- [ ] Build compliance report detail page
+- [ ] Test data persistence
+
+**Afternoon (4 hours):**
+- [ ] Polish UI with TailwindCSS
+- [ ] Add loading states and animations
+- [ ] Implement error handling across all flows
+- [ ] Test complete user journey multiple times
+- [ ] Deploy to Vercel (frontend + backend)
+- [ ] Test production deployment
+- [ ] Create demo video or screenshots
+- [ ] Write README with demo instructions
+
+---
+
+## Success Criteria
+
+### Functional Completeness
+- ✅ User can analyze large institutional trades (500k+ USDC)
+- ✅ User can connect MetaMask wallet to Base L2
+- ✅ User can execute small test trades ($5-10 USDC)
+- ✅ System generates post-trade analysis automatically
+- ✅ Execution quality is calculated correctly
+- ✅ Compliance reports are stored in Supabase
+- ✅ User can view trade history
+- ✅ User can view detailed compliance report for past trades
+
+### Technical Quality
+- ✅ No console errors in production
+- ✅ Responsive design (desktop-focused, mobile acceptable)
+- ✅ Loading states for all async operations
+- ✅ Error handling prevents crashes
+- ✅ Transactions submit successfully to Base L2
+- ✅ Data persists in Supabase correctly
+- ✅ RLS policies prevent cross-wallet data access
+
+### Demo-Ready
+- ✅ Can complete full demo in 3 minutes
+- ✅ UI is professional and polished
+- ✅ Real blockchain execution (not simulation)
+- ✅ Compliance value proposition is clear
+- ✅ Works reliably without random errors
+
+### Documentation
+- ✅ README explains what project does
+- ✅ README includes setup instructions
+- ✅ README includes demo walkthrough
+- ✅ Environment variables are documented
+- ✅ Code comments explain complex logic
+
+---
+
+## Risk Mitigation
+
+### Risk 1: API Key Approval Delay
+**Risk:** Uniswap API key may take 24-48 hours  
+**Mitigation:** Apply for key Day 1 morning. If delayed, use mock data to build UI, swap in real API later.
+
+### Risk 2: Base L2 Token Availability
+**Risk:** Need USDC on Base L2 for testing  
+**Mitigation:** Bridge USDC from mainnet to Base using official bridge (bridge.base.org). Takes ~10 minutes.
+
+### Risk 3: Transaction Failures
+**Risk:** Transactions may fail due to slippage, gas, or network issues  
+**Mitigation:** 
+- Use 0.5% slippage tolerance (not too tight)
+- Test with small amounts first
+- Implement retry logic for failed transactions
+- Show clear error messages to user
+
+### Risk 4: Supabase RLS Complexity
+**Risk:** RLS policies may block legitimate queries  
+**Mitigation:** For MVP, use simple RLS based on wallet address. Can refine later.
+
+### Risk 5: Web3 Integration Learning Curve
+**Risk:** wagmi/Web3Modal is new to you  
+**Mitigation:** 
+- Follow wagmi docs closely
+- Use Web3Modal examples
+- Test each integration step before moving forward
+- Don't try to optimize, just get it working first
+
+---
+
+## Out of Scope (Post-MVP)
+
+❌ **Not building in 3 days:**
+- Multi-chain support (only Base L2)
+- Mobile app
+- PDF export of compliance reports
+- Historical price data (using current prices as proxy)
+- User authentication (using wallet address only)
+- Team/organization accounts
+- Scheduled/recurring trades
+- Advanced analytics dashboard
+- API for third-party integrations
+- Custom token input (preset pairs only)
+- Gasless transactions (meta-transactions)
+- Batch trade execution
+- Portfolio tracking
+
+---
+
+## Appendix A: Token Addresses on Base L2
+
+**IMPORTANT:** Verify these addresses before implementation. Base L2 addresses differ from Ethereum mainnet.
+
+```javascript
+// Base L2 Mainnet (Chain ID: 8453)
+export const TOKENS_BASE = {
+  USDC: {
+    address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    symbol: "USDC",
+    decimals: 6,
+    name: "USD Coin"
+  },
+  WETH: {
+    address: "0x4200000000000000000000000000000000000006",
+    symbol: "ETH",
+    decimals: 18,
+    name: "Wrapped Ether"
+  },
+  // TODO: Verify these addresses on Base
+  WBTC: {
+    address: "0x...", // Need to verify
+    symbol: "WBTC",
+    decimals: 8,
+    name: "Wrapped Bitcoin"
+  },
+  DAI: {
+    address: "0x...", // Need to verify
+    symbol: "DAI",
+    decimals: 18,
+    name: "Dai Stablecoin"
+  },
+  USDT: {
+    address: "0x...", // Need to verify
+    symbol: "USDT",
+    decimals: 6,
+    name: "Tether USD"
+  }
+};
+
+// How to verify:
+// 1. Go to BaseScan.org
+// 2. Search for token by symbol
+// 3. Verify it's the official token (check holders, liquidity)
+// 4. Copy contract address
+```
+
+---
+
+## Appendix B: Example Supabase Query
+
+```typescript
+// Save trade after pre-trade analysis
+async function saveTradeAnalysis(
+  walletAddress: string,
+  tradeInput: TradeInput,
+  routesAnalysis: Route[]
+) {
+  const { data, error } = await supabase
+    .from('trades')
+    .insert({
+      wallet_address: walletAddress,
+      token_in_symbol: tradeInput.tokenInSymbol,
+      token_in_address: tradeInput.tokenInAddress,
+      token_out_symbol: tradeInput.tokenOutSymbol,
+      token_out_address: tradeInput.tokenOutAddress,
+      amount_in: tradeInput.amount,
+      chain_id: 8453,
+      predicted_output: routesAnalysis[0].outputAmount,
+      predicted_gas_usd: routesAnalysis[0].gasEstimateUSD,
+      recommended_route: routesAnalysis[0].protocol,
+      routes_analyzed: routesAnalysis
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data.id; // Return trade ID for later update
+}
+
+// Update trade after execution
+async function updateTradeExecution(
+  tradeId: string,
+  txReceipt: TransactionReceipt,
+  actualOutput: string,
+  executionQuality: number
+) {
+  const { error } = await supabase
+    .from('trades')
+    .update({
+      executed_at: new Date().toISOString(),
+      tx_hash: txReceipt.transactionHash,
+      actual_output: actualOutput,
+      actual_gas_usd: calculateGasCost(txReceipt),
+      route_used: 'Uniswap V3', // From execution context
+      execution_quality: executionQuality,
+      execution_quality_rating: getQualityRating(executionQuality),
+      compliance_report: generateComplianceReport(/* ... */)
+    })
+    .eq('id', tradeId);
+  
+  if (error) throw error;
+}
+
+// Fetch trade history
+async function getTradeHistory(walletAddress: string, limit = 20) {
+  const { data, error } = await supabase
+    .from('trades')
+    .select('*')
+    .eq('wallet_address', walletAddress)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  
+  if (error) throw error;
+  return data;
+}
+```
+
+---
+
+## Appendix C: Cost Breakdown for Demo
+
+**One-Time Setup Costs:**
+- Uniswap API key: Free
+- Supabase account: Free tier (plenty for demo)
+- WalletConnect project: Free
+- Vercel deployment: Free tier
+- **Total setup: $0**
+
+**Per-Demo Execution Costs (Base L2):**
+- Bridge USDC to Base: ~$3-5 (one-time)
+- Gas for approval: ~$0.10
+- Gas for swap: ~$0.30
+- Slippage loss on $10 trade: ~$0.05
+- **Total per demo: ~$0.50**
+
+**Recommended Budget:**
+- 0.01 ETH on Base for gas: ~$40
+- $50 USDC on Base for test trades
+- **Total recommended: ~$90**
+
+This is enough for 20+ demo executions.
+
+---
+
+## Questions for Dan
+
+1. **Uniswap API Key:** Have you applied yet at hub.uniswap.org?
+
+2. **Base L2 Setup:** Do you have any experience with L2s, or is this all new?
+
+3. **Test Funds:** Comfortable investing ~$90 for real execution testing?
+
+4. **wagmi/Web3:** Want me to include more detailed Web3 integration examples in the coding prompt?
+
+5. **Deployment:** Stick with Vercel, or prefer different platform?
+
+6. **Branding:** Should this be neutral or explicitly Anchorage-branded?
+
+7. **Demo Format:** What will you send to recruiter - live URL, video, GitHub, all three?
