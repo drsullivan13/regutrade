@@ -1,7 +1,9 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
-import { Shield, Wallet, ExternalLink } from "lucide-react";
+import { Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
+import WalletButton from "@/components/wallet/WalletButton";
+import WalletBalances from "@/components/wallet/WalletBalances";
 
 export default function Navbar() {
   const [location] = useLocation();
@@ -51,18 +53,10 @@ export default function Navbar() {
           ))}
         </nav>
 
-        {/* Right: Wallet & Balance */}
+        {/* Right: Wallet Balances & Connect Button */}
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex flex-col items-end text-xs">
-            <span className="text-slate-500">Balance</span>
-            <span className="font-mono font-medium tabular-nums text-slate-900">
-              $1,240,500.00 USDC
-            </span>
-          </div>
-          <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow transition-colors hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 disabled:pointer-events-none disabled:opacity-50">
-            <Wallet className="h-4 w-4" />
-            <span>0x71C...9A2</span>
-          </button>
+          <WalletBalances />
+          <WalletButton />
         </div>
       </div>
     </header>
