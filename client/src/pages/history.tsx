@@ -3,13 +3,15 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, Filter, ArrowUpRight, ArrowDownLeft, MoreHorizontal, Search, Download } from "lucide-react";
+import { CalendarIcon, Filter, ArrowUpRight, ArrowDownLeft, FileText, Search, Download } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLocation } from "wouter";
 
 export default function History() {
+  const [, setLocation] = useLocation();
   const { data: trades = [], isLoading } = useQuery({
     queryKey: ["trades"],
     queryFn: async () => {
@@ -128,8 +130,15 @@ export default function History() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
-                          <MoreHorizontal className="h-4 w-4" />
+                       <Button 
+                         variant="ghost" 
+                         size="sm" 
+                         className="h-8 gap-1.5 text-primary hover:text-blue-800 hover:bg-blue-50"
+                         onClick={() => setLocation(`/analysis/${trade.tradeId}`)}
+                         data-testid={`button-view-report-${trade.tradeId}`}
+                       >
+                          <FileText className="h-4 w-4" />
+                          View Report
                        </Button>
                     </TableCell>
                   </TableRow>

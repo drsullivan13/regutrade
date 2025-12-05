@@ -3,9 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, CheckCircle2, Download, ExternalLink, Loader2, FileText } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, Download, ExternalLink, Loader2, FileText, ArrowLeft } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { useLocation } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { downloadComplianceReport, type TradeData } from "@/lib/pdfGenerator";
 import { toast } from "sonner";
 
@@ -36,6 +36,7 @@ interface Trade {
 
 export default function Analysis() {
   const [, setLocation] = useLocation();
+  const params = useParams<{ tradeId?: string }>();
   
   const { data: trades, isLoading } = useQuery<Trade[]>({
     queryKey: ["trades"],
@@ -46,36 +47,42 @@ export default function Analysis() {
     },
   });
 
-  const latestTrade = trades?.[0];
+  // If a specific trade ID is provided in the URL, find that trade
+  // Otherwise, show the latest trade
+  const selectedTrade = params.tradeId 
+    ? trades?.find(t => t.tradeId === params.tradeId)
+    : trades?.[0];
+  
+  const isSpecificTrade = !!params.tradeId;
 
   const handleDownloadPDF = () => {
-    if (!latestTrade) {
+    if (!selectedTrade) {
       toast.error("No trade data available");
       return;
     }
     
     try {
       const tradeData: TradeData = {
-        tradeId: latestTrade.tradeId,
-        pairFrom: latestTrade.pairFrom,
-        pairTo: latestTrade.pairTo,
-        amountIn: latestTrade.amountIn,
-        amountOut: latestTrade.amountOut,
-        type: latestTrade.type,
-        route: latestTrade.route,
-        effectiveRate: latestTrade.effectiveRate,
-        gasCost: latestTrade.gasCost,
-        gasUsed: latestTrade.gasUsed,
-        executionQuality: latestTrade.executionQuality,
-        qualityScore: latestTrade.qualityScore,
-        predictedOutput: latestTrade.predictedOutput,
-        priceImpact: latestTrade.priceImpact,
-        transactionHash: latestTrade.transactionHash,
-        walletAddress: latestTrade.walletAddress,
-        network: latestTrade.network,
-        blockNumber: latestTrade.blockNumber,
-        status: latestTrade.status,
-        createdAt: latestTrade.timestamp,
+        tradeId: selectedTrade.tradeId,
+        pairFrom: selectedTrade.pairFrom,
+        pairTo: selectedTrade.pairTo,
+        amountIn: selectedTrade.amountIn,
+        amountOut: selectedTrade.amountOut,
+        type: selectedTrade.type,
+        route: selectedTrade.route,
+        effectiveRate: selectedTrade.effectiveRate,
+        gasCost: selectedTrade.gasCost,
+        gasUsed: selectedTrade.gasUsed,
+        executionQuality: selectedTrade.executionQuality,
+        qualityScore: selectedTrade.qualityScore,
+        predictedOutput: selectedTrade.predictedOutput,
+        priceImpact: selectedTrade.priceImpact,
+        transactionHash: selectedTrade.transactionHash,
+        walletAddress: selectedTrade.walletAddress,
+        network: selectedTrade.network,
+        blockNumber: selectedTrade.blockNumber,
+        status: selectedTrade.status,
+        createdAt: selectedTrade.timestamp,
       };
       
       downloadComplianceReport(tradeData);
@@ -98,9 +105,9 @@ export default function Analysis() {
   };
 
   const calculateVariance = () => {
-    if (!latestTrade) return { value: "0.00", positive: true };
-    const predicted = parseFloat(latestTrade.predictedOutput);
-    const actual = parseFloat(latestTrade.amountOut);
+    if (!selectedTrade) return { value: "0.00", positive: true };
+    const predicted = parseFloat(selectedTrade.predictedOutput);
+    const actual = parseFloat(selectedTrade.amountOut);
     if (isNaN(predicted) || isNaN(actual) || predicted === 0) return { value: "0.00", positive: true };
     const variance = ((actual - predicted) / predicted * 100);
     return { 
@@ -117,7 +124,7 @@ export default function Analysis() {
     );
   }
 
-  if (!latestTrade) {
+  if (!selectedTrade) {
     return (
       <div className="space-y-8">
         <div className="flex items-center justify-between">
@@ -142,7 +149,7 @@ export default function Analysis() {
   }
 
   const variance = calculateVariance();
-  const qualityScore = parseFloat(latestTrade.qualityScore);
+  const qualityScore = parseFloat(selectedTrade.qualityScore);
   const qualityBadge = qualityScore >= 99 ? "Excellent" : qualityScore >= 95 ? "Good" : "Fair";
   const qualityColor = qualityScore >= 99 ? "bg-green-100 text-green-800 border-green-200" : 
                        qualityScore >= 95 ? "bg-amber-100 text-amber-800 border-amber-200" : 
@@ -150,6 +157,19 @@ export default function Analysis() {
 
   return (
     <div className="space-y-8">
+      {isSpecificTrade && (
+        <Button 
+          variant="ghost" 
+          size="sm"
+          className="gap-1.5 text-slate-600 hover:text-slate-900 -ml-2"
+          onClick={() => setLocation("/history")}
+          data-testid="button-back-history"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Trade History
+        </Button>
+      )}
+      
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Post-Trade Analysis</h1>
@@ -174,10 +194,10 @@ export default function Analysis() {
       {/* Trade ID Header */}
       <div className="flex items-center gap-4">
         <Badge variant="outline" className="text-sm px-3 py-1 font-mono">
-          {latestTrade.tradeId}
+          {selectedTrade.tradeId}
         </Badge>
         <span className="text-sm text-slate-500">
-          {new Date(latestTrade.timestamp).toLocaleString()}
+          {new Date(selectedTrade.timestamp).toLocaleString()}
         </span>
         <Badge className={qualityColor}>{qualityBadge}</Badge>
       </div>
@@ -189,7 +209,7 @@ export default function Analysis() {
             <div className="text-sm font-medium text-slate-500 uppercase tracking-wider">Execution Quality</div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-4xl font-bold text-slate-900 tabular-nums" data-testid="text-quality-score">
-                {latestTrade.qualityScore}%
+                {selectedTrade.qualityScore}%
               </span>
               <Badge className={qualityColor}>{qualityBadge}</Badge>
             </div>
@@ -203,9 +223,9 @@ export default function Analysis() {
           <CardContent className="pt-6">
             <div className="text-sm font-medium text-slate-500 uppercase tracking-wider">Effective Rate</div>
             <div className="mt-2 text-4xl font-bold text-slate-900 tabular-nums" data-testid="text-effective-rate">
-              {formatNumber(latestTrade.effectiveRate)}
+              {formatNumber(selectedTrade.effectiveRate)}
             </div>
-            <p className="mt-1 text-xs text-slate-500">{latestTrade.pairFrom} per {latestTrade.pairTo}</p>
+            <p className="mt-1 text-xs text-slate-500">{selectedTrade.pairFrom} per {selectedTrade.pairTo}</p>
           </CardContent>
         </Card>
 
@@ -213,9 +233,9 @@ export default function Analysis() {
           <CardContent className="pt-6">
             <div className="text-sm font-medium text-slate-500 uppercase tracking-wider">Transaction Cost</div>
             <div className="mt-2 text-4xl font-bold text-slate-900 tabular-nums" data-testid="text-gas-cost">
-              {latestTrade.gasCost}
+              {selectedTrade.gasCost}
             </div>
-            <p className="mt-1 text-xs text-slate-500">Gas used: {formatNumber(latestTrade.gasUsed)} units</p>
+            <p className="mt-1 text-xs text-slate-500">Gas used: {formatNumber(selectedTrade.gasUsed)} units</p>
           </CardContent>
         </Card>
       </div>
@@ -230,16 +250,16 @@ export default function Analysis() {
             <div className="flex justify-between py-2 border-b border-slate-100">
               <span className="text-slate-500">Expected Output</span>
               <span className="font-mono font-medium text-slate-700" data-testid="text-predicted-output">
-                {formatNumber(latestTrade.predictedOutput)} {latestTrade.pairTo}
+                {formatNumber(selectedTrade.predictedOutput)} {selectedTrade.pairTo}
               </span>
             </div>
             <div className="flex justify-between py-2 border-b border-slate-100">
               <span className="text-slate-500">Price Impact</span>
-              <span className="font-mono font-medium text-slate-700">{latestTrade.priceImpact}</span>
+              <span className="font-mono font-medium text-slate-700">{selectedTrade.priceImpact}</span>
             </div>
             <div className="flex justify-between py-2">
               <span className="text-slate-500">Route</span>
-              <span className="font-medium text-slate-700 text-right max-w-[200px]">{latestTrade.route}</span>
+              <span className="font-medium text-slate-700 text-right max-w-[200px]">{selectedTrade.route}</span>
             </div>
           </CardContent>
         </Card>
@@ -256,7 +276,7 @@ export default function Analysis() {
             <div className="flex justify-between py-2 border-b border-slate-100">
               <span className="text-slate-500">Actual Output</span>
               <span className="font-mono font-bold text-slate-900" data-testid="text-actual-output">
-                {formatNumber(latestTrade.amountOut)} {latestTrade.pairTo}
+                {formatNumber(selectedTrade.amountOut)} {selectedTrade.pairTo}
               </span>
             </div>
             <div className="flex justify-between py-2 border-b border-slate-100">
@@ -268,13 +288,13 @@ export default function Analysis() {
             <div className="flex justify-between py-2">
               <span className="text-slate-500">Transaction Hash</span>
               <a 
-                href={`https://basescan.org/tx/${latestTrade.transactionHash}`}
+                href={`https://basescan.org/tx/${selectedTrade.transactionHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-mono text-primary flex items-center gap-1 hover:underline"
                 data-testid="link-transaction"
               >
-                {formatAddress(latestTrade.transactionHash)} 
+                {formatAddress(selectedTrade.transactionHash)} 
                 <ExternalLink className="h-3 w-3" />
               </a>
             </div>
@@ -291,17 +311,17 @@ export default function Analysis() {
           <div className="grid gap-4 md:grid-cols-4">
             <div>
               <div className="text-sm text-slate-500">Network</div>
-              <div className="font-medium text-slate-900">{latestTrade.network}</div>
+              <div className="font-medium text-slate-900">{selectedTrade.network}</div>
             </div>
             <div>
               <div className="text-sm text-slate-500">Wallet Address</div>
-              <div className="font-mono text-slate-900">{formatAddress(latestTrade.walletAddress)}</div>
+              <div className="font-mono text-slate-900">{formatAddress(selectedTrade.walletAddress)}</div>
             </div>
-            {latestTrade.blockNumber && (
+            {selectedTrade.blockNumber && (
               <div>
                 <div className="text-sm text-slate-500">Block Number</div>
                 <div className="font-mono text-slate-900" data-testid="text-block-number">
-                  {latestTrade.blockNumber}
+                  {selectedTrade.blockNumber}
                 </div>
               </div>
             )}
@@ -309,7 +329,7 @@ export default function Analysis() {
               <div className="text-sm text-slate-500">Status</div>
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                <span className="font-medium text-green-700">{latestTrade.status}</span>
+                <span className="font-medium text-green-700">{selectedTrade.status}</span>
               </div>
             </div>
           </div>
