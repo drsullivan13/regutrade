@@ -261,6 +261,7 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
       transactionHash: transactionHash,
       walletAddress: walletAddr,
       network: "Base L2",
+      blockNumber: confirmedBlockNumber ? confirmedBlockNumber.toString() : null,
       status: "Completed",
       routesAnalyzed: analysisData.routes,
     };

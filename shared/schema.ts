@@ -45,6 +45,7 @@ export const trades = pgTable("trades", {
   transactionHash: text("transaction_hash").notNull(),
   walletAddress: text("wallet_address").notNull(),
   network: text("network").notNull().default("Base L2"),
+  blockNumber: text("block_number"),
   
   // Compliance
   status: text("status").notNull().default("Completed"),
