@@ -84,50 +84,32 @@ export interface RouteQuote {
 /**
  * Get a quote for swapping tokens using V3 QuoterV2
  * This is a read-only call that simulates the swap to get the output amount
- * Includes retry logic for RPC rate limiting
  */
 export async function getQuoteV3(
   tokenIn: string,
   tokenOut: string,
   amountIn: bigint,
-  fee: FeeTier,
-  retryCount = 0
+  fee: FeeTier
 ): Promise<QuoteResult> {
-  try {
-    const result = await publicClient.readContract({
-      address: V3_CONTRACTS.QUOTER_V2 as `0x${string}`,
-      abi: QUOTER_V2_ABI,
-      functionName: 'quoteExactInputSingle',
-      args: [{
-        tokenIn: tokenIn as `0x${string}`,
-        tokenOut: tokenOut as `0x${string}`,
-        amountIn,
-        fee,
-        sqrtPriceLimitX96: BigInt(0),
-      }],
-    });
+  const result = await publicClient.readContract({
+    address: V3_CONTRACTS.QUOTER_V2 as `0x${string}`,
+    abi: QUOTER_V2_ABI,
+    functionName: 'quoteExactInputSingle',
+    args: [{
+      tokenIn: tokenIn as `0x${string}`,
+      tokenOut: tokenOut as `0x${string}`,
+      amountIn,
+      fee,
+      sqrtPriceLimitX96: BigInt(0),
+    }],
+  });
 
-    return {
-      amountOut: result[0],
-      sqrtPriceX96After: result[1],
-      initializedTicksCrossed: result[2],
-      gasEstimate: result[3],
-    };
-  } catch (error: any) {
-    // Check if this is a rate limit / network error (not a contract revert)
-    const errorMsg = error?.message || String(error);
-    const isRateLimitError = !errorMsg.includes('execution reverted') && 
-                             !errorMsg.includes('0x') &&
-                             retryCount < 1; // Only retry once
-    
-    if (isRateLimitError) {
-      // Quick retry after 50ms delay
-      await new Promise(resolve => setTimeout(resolve, 50));
-      return getQuoteV3(tokenIn, tokenOut, amountIn, fee, retryCount + 1);
-    }
-    
-    throw error;
-  }
+  return {
+    amountOut: result[0],
+    sqrtPriceX96After: result[1],
+    initializedTicksCrossed: result[2],
+    gasEstimate: result[3],
+  };
 }
 
 /**
@@ -197,14 +179,9 @@ export async function findBestRoute(
 
   const routes: RouteQuote[] = [];
 
-  // Query all fee tiers with slight stagger to avoid RPC rate limits
-  // Each call starts 25ms apart, keeping total time under 100ms for initial dispatch
-  const quotePromises = V3_FEE_TIERS.map(async (fee, index) => {
+  // Query all fee tiers in parallel
+  const quotePromises = V3_FEE_TIERS.map(async (fee) => {
     try {
-      // Stagger requests to avoid RPC rate limiting
-      if (index > 0) {
-        await new Promise(resolve => setTimeout(resolve, index * 25));
-      }
       const quote = await getQuoteV3(tokenInAddress, tokenOutAddress, amountIn, fee);
       
       // Calculate gas cost in USD
@@ -233,16 +210,9 @@ export async function findBestRoute(
         route: `${tokenIn.symbol} -> [${FEE_TIER_LABELS[fee]}] -> ${tokenOut.symbol}`,
         isBest: false,
       };
-    } catch (error: any) {
-      // Could be "no pool", "no liquidity", or RPC error
-      const errorMsg = error?.message || String(error);
-      if (errorMsg.includes('execution reverted') || errorMsg.includes('0x')) {
-        // This is likely "no pool" or "no liquidity" - expected for some fee tiers
-        console.log(`No pool for ${tokenIn.symbol}/${tokenOut.symbol} at ${FEE_TIER_LABELS[fee]}`);
-      } else {
-        // RPC or network error - worth logging more details
-        console.error(`RPC error for ${tokenIn.symbol}/${tokenOut.symbol} at ${FEE_TIER_LABELS[fee]}:`, errorMsg);
-      }
+    } catch (error) {
+      // Pool doesn't exist or has no liquidity for this fee tier
+      console.log(`No pool for ${tokenIn.symbol}/${tokenOut.symbol} at ${FEE_TIER_LABELS[fee]}`);
       return null;
     }
   });
