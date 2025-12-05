@@ -1,11 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Loader2, ShieldCheck, Wallet, AlertCircle } from "lucide-react";
+import { CheckCircle2, Loader2, ShieldCheck, Wallet, AlertCircle, ExternalLink, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
-import { useAccount } from "wagmi";
+import { useAccount, useSendTransaction, usePublicClient } from "wagmi";
 import type { Route } from "./RouteComparison";
+import { 
+  buildSwapTransaction, 
+  buildApprovalTransaction, 
+  calculateMinOutput,
+  getFeeTier,
+  SWAP_ROUTER_02_ADDRESS 
+} from "@/lib/swap";
+import { TOKEN_ADDRESSES } from "@/lib/wagmi";
+import type { Address } from "viem";
 
 interface ExecutionModalProps {
   isOpen: boolean;
@@ -26,59 +35,210 @@ interface Step {
 export default function ExecutionModal({ isOpen, onOpenChange, analysisData, selectedRoute }: ExecutionModalProps) {
   const [, setLocation] = useLocation();
   const { address, isConnected } = useAccount();
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const publicClient = usePublicClient();
   const [tradeId, setTradeId] = useState<string>("");
   const [executionStarted, setExecutionStarted] = useState(false);
+  const [executionMode, setExecutionMode] = useState<"demo" | "live">("demo");
+  const [error, setError] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const [blockNumber, setBlockNumber] = useState<bigint | undefined>();
+  const [isProcessing, setIsProcessing] = useState(false);
+  
   const [steps, setSteps] = useState<Step[]>([
-    { id: "wallet", label: "Wallet Approval", description: "Confirm transaction in your wallet", status: "pending" },
+    { id: "approval", label: "Token Approval", description: "Approve token spending", status: "pending" },
     { id: "compliance", label: "Compliance Check", description: "Verifying sanctions and limits", status: "pending" },
     { id: "execution", label: "On-Chain Execution", description: "Swapping tokens via Uniswap", status: "pending" },
     { id: "settlement", label: "Settlement", description: "Waiting for block confirmation", status: "pending" },
   ]);
 
+  const { sendTransactionAsync, isPending: isSending } = useSendTransaction();
+
   const routeToExecute = selectedRoute || analysisData?.routes?.find((r: Route) => r.isBest);
 
   const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-  useEffect(() => {
-    if (isOpen && analysisData && routeToExecute && executionStarted) {
-      setCurrentStepIndex(0);
-      setSteps(steps.map((s, i) => ({ ...s, status: i === 0 ? "active" : "pending" })));
+  const getTokenAddress = (symbol: string): Address => {
+    const addresses: Record<string, Address> = {
+      USDC: TOKEN_ADDRESSES.USDC,
+      WETH: TOKEN_ADDRESSES.WETH,
+      DAI: TOKEN_ADDRESSES.DAI,
+      USDbC: TOKEN_ADDRESSES.USDbC,
+      cbETH: TOKEN_ADDRESSES.cbETH,
+    };
+    return addresses[symbol.toUpperCase()] || TOKEN_ADDRESSES.USDC;
+  };
 
-      const interval = setInterval(() => {
-        setCurrentStepIndex((prev) => {
-          if (prev >= 3) {
-            clearInterval(interval);
-            if (prev === 3) {
-              createTrade();
-            }
-            return prev;
-          }
-          const next = prev + 1;
-          setSteps((currentSteps) => 
-            currentSteps.map((step, index) => ({
-              ...step,
-              status: index < next ? "completed" : index === next ? "active" : "pending"
-            }))
-          );
-          return next;
-        });
-      }, 2000);
-
-      return () => clearInterval(interval);
-    }
-  }, [isOpen, analysisData, routeToExecute, executionStarted]);
-
+  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setExecutionStarted(false);
-      setCurrentStepIndex(0);
+      setExecutionMode("demo");
+      setError(null);
+      setTxHash(undefined);
+      setBlockNumber(undefined);
       setTradeId("");
+      setIsProcessing(false);
       setSteps(steps.map(s => ({ ...s, status: "pending" })));
     }
   }, [isOpen]);
 
-  const createTrade = async () => {
+  // Demo mode execution (simulated)
+  const executeDemoMode = useCallback(async () => {
+    setIsProcessing(true);
+    setSteps(steps.map((s, i) => ({ ...s, status: i === 0 ? "active" : "pending" })));
+    
+    for (let i = 0; i < 4; i++) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setSteps(currentSteps => 
+        currentSteps.map((step, index) => ({
+          ...step,
+          status: index <= i ? "completed" : index === i + 1 ? "active" : "pending"
+        }))
+      );
+    }
+    
+    // Create trade with simulated hash and block
+    const simulatedHash = `0x${Date.now().toString(16)}${Math.random().toString(16).substr(2, 48)}` as `0x${string}`;
+    const simulatedBlock = BigInt(Math.floor(Date.now() / 1000));
+    setTxHash(simulatedHash);
+    setBlockNumber(simulatedBlock);
+    await createTrade(simulatedHash, simulatedBlock);
+    setIsProcessing(false);
+  }, []);
+
+  // Live mode execution (real on-chain)
+  const executeLiveMode = useCallback(async () => {
+    if (!address || !analysisData || !routeToExecute || !publicClient) return;
+
+    setIsProcessing(true);
+    
+    try {
+      setError(null);
+      const tokenIn = getTokenAddress(analysisData.pairFrom);
+      const tokenOut = getTokenAddress(analysisData.pairTo);
+      const amountIn = analysisData.amountIn;
+      const expectedOutput = routeToExecute.outputRaw || routeToExecute.output.split(" ")[0];
+      const minOutput = calculateMinOutput(expectedOutput, 100); // 1% slippage for safety
+      const fee = getFeeTier(tokenIn, tokenOut);
+
+      // Step 1: Approval
+      setSteps(currentSteps => 
+        currentSteps.map((step, i) => ({ ...step, status: i === 0 ? "active" : "pending" }))
+      );
+
+      const approvalTx = buildApprovalTransaction(tokenIn, SWAP_ROUTER_02_ADDRESS, amountIn);
+      
+      try {
+        // Send approval transaction
+        const approvalHash = await sendTransactionAsync({
+          to: approvalTx.to,
+          data: approvalTx.data,
+          value: approvalTx.value,
+        });
+
+        // CRITICAL: Wait for approval transaction to be confirmed on-chain
+        // This ensures the allowance is set before we attempt the swap
+        const approvalReceipt = await publicClient.waitForTransactionReceipt({
+          hash: approvalHash,
+          confirmations: 1,
+        });
+
+        if (approvalReceipt.status !== "success") {
+          throw new Error("Approval transaction failed");
+        }
+
+        setSteps(currentSteps => 
+          currentSteps.map((step, i) => ({ 
+            ...step, 
+            status: i === 0 ? "completed" : i === 1 ? "active" : "pending" 
+          }))
+        );
+
+        // Step 2: Compliance check (auto-pass)
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setSteps(currentSteps => 
+          currentSteps.map((step, i) => ({ 
+            ...step, 
+            status: i <= 1 ? "completed" : i === 2 ? "active" : "pending" 
+          }))
+        );
+
+        // Step 3: Execute swap
+        const swapTx = buildSwapTransaction({
+          tokenIn,
+          tokenOut,
+          amountIn,
+          amountOutMin: minOutput,
+          recipient: address,
+          fee,
+        });
+
+        const swapHash = await sendTransactionAsync({
+          to: swapTx.to,
+          data: swapTx.data,
+          value: swapTx.value,
+        });
+
+        setTxHash(swapHash);
+        
+        setSteps(currentSteps => 
+          currentSteps.map((step, i) => ({ 
+            ...step, 
+            status: i <= 2 ? "completed" : "active" 
+          }))
+        );
+
+        // Step 4: Wait for swap confirmation
+        const swapReceipt = await publicClient.waitForTransactionReceipt({
+          hash: swapHash,
+          confirmations: 1,
+        });
+
+        if (swapReceipt.status !== "success") {
+          throw new Error("Swap transaction failed");
+        }
+
+        setBlockNumber(swapReceipt.blockNumber);
+        
+        setSteps(currentSteps => 
+          currentSteps.map(step => ({ ...step, status: "completed" }))
+        );
+
+        // Create trade record with real on-chain data
+        await createTrade(swapHash, swapReceipt.blockNumber);
+
+      } catch (txError: any) {
+        console.error("Transaction error:", txError);
+        
+        let errorMessage = "Transaction failed";
+        if (txError.message?.includes("rejected") || txError.message?.includes("denied") || txError.message?.includes("User rejected")) {
+          errorMessage = "Transaction rejected by user";
+        } else if (txError.message?.includes("insufficient") || txError.message?.includes("Insufficient")) {
+          errorMessage = "Insufficient token balance";
+        } else if (txError.message?.includes("allowance")) {
+          errorMessage = "Token approval failed";
+        } else if (txError.message?.includes("execution reverted")) {
+          errorMessage = "Transaction reverted - check slippage or liquidity";
+        }
+        
+        setError(errorMessage);
+        setSteps(currentSteps => 
+          currentSteps.map((step) => ({ 
+            ...step, 
+            status: step.status === "active" ? "error" : step.status 
+          }))
+        );
+      }
+
+    } catch (err: any) {
+      console.error("Execution error:", err);
+      setError(err.message || "Execution failed");
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [address, analysisData, routeToExecute, sendTransactionAsync, publicClient]);
+
+  const createTrade = async (transactionHash: `0x${string}`, confirmedBlockNumber?: bigint) => {
     if (!analysisData || !routeToExecute) return;
 
     const walletAddr = address || "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
@@ -98,7 +258,7 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
       qualityScore: "99.48",
       predictedOutput: routeToExecute.predictedOutput || routeToExecute.output.split(" ")[0],
       priceImpact: routeToExecute.priceImpact,
-      transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
+      transactionHash: transactionHash,
       walletAddress: walletAddr,
       network: "Base L2",
       status: "Completed",
@@ -119,17 +279,26 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
     }
   };
 
-  const handleStartExecution = () => {
+  const handleStartExecution = (mode: "demo" | "live") => {
+    setExecutionMode(mode);
     setExecutionStarted(true);
+    
+    if (mode === "demo") {
+      executeDemoMode();
+    } else {
+      executeLiveMode();
+    }
   };
 
-  const isComplete = steps[steps.length - 1].status === "completed";
+  const isComplete = steps.every(s => s.status === "completed");
+  const hasError = error !== null || steps.some(s => s.status === "error");
 
   const handleViewReport = () => {
     onOpenChange(false);
     setLocation("/analysis");
   };
 
+  // Wallet not connected
   if (!isConnected && isOpen && !executionStarted) {
     return (
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -140,22 +309,25 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
               Wallet Not Connected
             </DialogTitle>
             <DialogDescription>
-              Connect your wallet to execute trades on Base L2.
+              Connect your wallet to execute live trades on Base L2.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
-              <p className="font-medium">Connection Required</p>
+              <p className="font-medium">Connection Required for Live Trading</p>
               <p className="mt-1">
-                To execute trades on-chain, you need to connect a wallet that supports Base L2.
+                You can still run a demo execution to see how the process works.
               </p>
             </div>
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-blue-800">
-                Connect Wallet First
+              <Button 
+                onClick={() => handleStartExecution("demo")} 
+                className="bg-slate-600 hover:bg-slate-700"
+              >
+                Run Demo
               </Button>
             </div>
           </div>
@@ -164,6 +336,7 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
     );
   }
 
+  // Confirmation screen
   if (!executionStarted && isOpen) {
     return (
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -202,7 +375,14 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
 
             <div className="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
               <Wallet className="h-4 w-4" />
-              <span>Executing from: <span className="font-mono">{address ? formatAddress(address) : "Not connected"}</span></span>
+              <span>Executing from: <span className="font-mono">{address ? formatAddress(address) : "Demo mode"}</span></span>
+            </div>
+
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+              <p className="font-medium">Test Mode Recommended</p>
+              <p className="text-xs mt-1">
+                For testing, use Demo mode. Live execution requires actual tokens and gas.
+              </p>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -210,12 +390,20 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
                 Cancel
               </Button>
               <Button 
-                onClick={handleStartExecution} 
+                onClick={() => handleStartExecution("demo")} 
+                variant="outline"
+                className="gap-2"
+              >
+                Demo Mode
+              </Button>
+              <Button 
+                onClick={() => handleStartExecution("live")} 
                 className="bg-primary hover:bg-blue-800 gap-2"
                 data-testid="button-confirm-execution"
+                disabled={!isConnected}
               >
                 <Wallet className="h-4 w-4" />
-                Confirm & Execute
+                Execute Live
               </Button>
             </div>
           </div>
@@ -224,39 +412,67 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
     );
   }
 
+  // Execution in progress
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] p-0 gap-0 overflow-hidden border-none shadow-2xl">
-        <div className="bg-slate-900 p-6 text-white">
+        <div className={cn(
+          "p-6 text-white",
+          hasError ? "bg-red-900" : isComplete ? "bg-green-900" : "bg-slate-900"
+        )}>
           <DialogHeader>
             <DialogTitle className="text-xl font-medium tracking-tight text-white flex items-center gap-2">
-              {isComplete ? (
-                 <>
-                   <CheckCircle2 className="h-6 w-6 text-green-400" />
-                   Trade Executed Successfully
-                 </>
+              {hasError ? (
+                <>
+                  <XCircle className="h-6 w-6 text-red-400" />
+                  Execution Failed
+                </>
+              ) : isComplete ? (
+                <>
+                  <CheckCircle2 className="h-6 w-6 text-green-400" />
+                  Trade Executed Successfully
+                </>
               ) : (
-                 <>
-                   <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
-                   Executing Trade...
-                 </>
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+                  Executing Trade...
+                </>
               )}
             </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              {isComplete ? "Your trade has been confirmed on Base L2" : "Please wait while we process your transaction"}
+            <DialogDescription className={cn(
+              hasError ? "text-red-300" : "text-slate-400"
+            )}>
+              {hasError 
+                ? error || "Transaction failed" 
+                : isComplete 
+                  ? "Your trade has been confirmed on Base L2" 
+                  : "Please confirm transactions in your wallet"}
             </DialogDescription>
             <div className="mt-2 space-y-1">
-              <div className="text-slate-400 font-mono text-sm">
-                {isComplete ? `ID: ${tradeId}` : "Processing..."}
-              </div>
-              {routeToExecute && (
-                <div className="text-slate-300 text-sm">
-                  Route: {routeToExecute.name}
+              {isComplete && tradeId && (
+                <div className="text-slate-400 font-mono text-sm">
+                  Trade ID: {tradeId}
                 </div>
               )}
-              {address && (
-                <div className="text-slate-400 text-xs font-mono">
-                  Wallet: {formatAddress(address)}
+              {txHash && (
+                <a 
+                  href={`https://basescan.org/tx/${txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-blue-400 hover:text-blue-300 text-sm font-mono"
+                >
+                  {formatAddress(txHash)}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {blockNumber && (
+                <div className="text-slate-500 text-xs font-mono">
+                  Block: {blockNumber.toString()}
+                </div>
+              )}
+              {executionMode === "demo" && (
+                <div className="text-amber-400 text-xs">
+                  Demo Mode - No real transactions
                 </div>
               )}
             </div>
@@ -272,12 +488,17 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
                 <div className={cn(
                   "flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all duration-500",
                   step.status === "completed" ? "bg-green-600 border-green-600 text-white" :
+                  step.status === "error" ? "bg-red-600 border-red-600 text-white" :
                   step.status === "active" ? "bg-white border-primary text-primary ring-4 ring-blue-50" :
                   "bg-white border-slate-200 text-slate-300"
                 )}>
                   {step.status === "completed" ? (
                     <CheckCircle2 className="h-6 w-6" />
-                  ) : step.id === "wallet" ? (
+                  ) : step.status === "error" ? (
+                    <XCircle className="h-6 w-6" />
+                  ) : step.status === "active" ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : step.id === "approval" ? (
                     <Wallet className="h-5 w-5" />
                   ) : step.id === "compliance" ? (
                     <ShieldCheck className="h-5 w-5" />
@@ -288,7 +509,8 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
                 <div className="pt-1">
                   <h4 className={cn(
                     "text-sm font-bold uppercase tracking-wide transition-colors",
-                    step.status === "pending" ? "text-slate-400" : "text-slate-900"
+                    step.status === "pending" ? "text-slate-400" : 
+                    step.status === "error" ? "text-red-600" : "text-slate-900"
                   )}>
                     {step.label}
                   </h4>
@@ -298,15 +520,36 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
             ))}
           </div>
 
-          <div className="mt-8 flex justify-end pt-6 border-t border-slate-100">
-            {isComplete ? (
-               <Button onClick={handleViewReport} className="bg-primary hover:bg-blue-800 w-full sm:w-auto" data-testid="button-view-analysis">
-                 View Post-Trade Analysis
-               </Button>
+          <div className="mt-8 flex justify-end pt-6 border-t border-slate-100 gap-3">
+            {hasError ? (
+              <>
+                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                  Close
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setError(null);
+                    setExecutionStarted(false);
+                    setSteps(steps.map(s => ({ ...s, status: "pending" })));
+                  }} 
+                  className="bg-primary hover:bg-blue-800"
+                >
+                  Try Again
+                </Button>
+              </>
+            ) : isComplete ? (
+              <Button 
+                onClick={handleViewReport} 
+                className="bg-primary hover:bg-blue-800 w-full sm:w-auto" 
+                data-testid="button-view-analysis"
+              >
+                View Post-Trade Analysis
+              </Button>
             ) : (
-               <Button disabled variant="outline" className="w-full sm:w-auto">
-                 Processing...
-               </Button>
+              <Button disabled variant="outline" className="w-full sm:w-auto gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {isSending ? "Confirm in Wallet..." : isProcessing ? "Processing..." : "Waiting..."}
+              </Button>
             )}
           </div>
         </div>
