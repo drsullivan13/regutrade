@@ -12,7 +12,7 @@ export interface Token {
   logoURI?: string;
 }
 
-// Official Base L2 token addresses
+// Official Base L2 token addresses - Core tokens only
 export const TOKENS: Record<string, Token> = {
   ETH: {
     symbol: "ETH",
@@ -32,36 +32,6 @@ export const TOKENS: Record<string, Token> = {
     address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     decimals: 6,
   },
-  USDbC: {
-    symbol: "USDbC",
-    name: "USD Base Coin (Bridged)",
-    address: "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA",
-    decimals: 6,
-  },
-  DAI: {
-    symbol: "DAI",
-    name: "Dai Stablecoin",
-    address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb",
-    decimals: 18,
-  },
-  cbETH: {
-    symbol: "cbETH",
-    name: "Coinbase Wrapped Staked ETH",
-    address: "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22",
-    decimals: 18,
-  },
-  LINK: {
-    symbol: "LINK",
-    name: "Chainlink",
-    address: "0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196",
-    decimals: 18,
-  },
-  AAVE: {
-    symbol: "AAVE",
-    name: "Aave",
-    address: "0x63706e401c06ac8513145b7687a14804d17f814b",
-    decimals: 18,
-  },
 };
 
 // Supported trading pairs for the platform
@@ -73,7 +43,7 @@ export interface TokenPair {
 }
 
 export const TOKEN_PAIRS: TokenPair[] = [
-  // Stablecoin to ETH pairs
+  // USDC to ETH/WETH pairs
   {
     id: "usdc-weth",
     from: TOKENS.USDC,
@@ -86,25 +56,7 @@ export const TOKEN_PAIRS: TokenPair[] = [
     to: TOKENS.ETH,
     label: "USDC -> ETH",
   },
-  {
-    id: "usdc-cbeth",
-    from: TOKENS.USDC,
-    to: TOKENS.cbETH,
-    label: "USDC -> cbETH",
-  },
-  {
-    id: "dai-weth",
-    from: TOKENS.DAI,
-    to: TOKENS.WETH,
-    label: "DAI -> WETH",
-  },
-  {
-    id: "usdbc-weth",
-    from: TOKENS.USDbC,
-    to: TOKENS.WETH,
-    label: "USDbC -> WETH",
-  },
-  // ETH to stablecoin pairs
+  // ETH/WETH to USDC pairs
   {
     id: "weth-usdc",
     from: TOKENS.WETH,
@@ -116,31 +68,6 @@ export const TOKEN_PAIRS: TokenPair[] = [
     from: TOKENS.ETH,
     to: TOKENS.USDC,
     label: "ETH -> USDC",
-  },
-  // DeFi token pairs (verified official tokens on Base L2)
-  {
-    id: "usdc-link",
-    from: TOKENS.USDC,
-    to: TOKENS.LINK,
-    label: "USDC -> LINK",
-  },
-  {
-    id: "usdc-aave",
-    from: TOKENS.USDC,
-    to: TOKENS.AAVE,
-    label: "USDC -> AAVE",
-  },
-  {
-    id: "weth-link",
-    from: TOKENS.WETH,
-    to: TOKENS.LINK,
-    label: "WETH -> LINK",
-  },
-  {
-    id: "weth-aave",
-    from: TOKENS.WETH,
-    to: TOKENS.AAVE,
-    label: "WETH -> AAVE",
   },
 ];
 

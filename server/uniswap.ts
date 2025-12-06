@@ -64,16 +64,14 @@ async function generateQuotesWithGraphPricing(
     priceSource = "The Graph (Live)";
     console.log(`Using Graph pricing: 1 ${tokenIn.symbol} = ${baseRate.toFixed(6)} ${tokenOut.symbol}`);
   } else {
-    // Fallback to hardcoded rates
-    if (tokenIn.symbol === "USDC" || tokenIn.symbol === "USDbC" || tokenIn.symbol === "DAI") {
-      if (tokenOut.symbol === "WETH") {
+    // Fallback to hardcoded rates for core tokens: USDC, ETH, WETH
+    if (tokenIn.symbol === "USDC") {
+      if (tokenOut.symbol === "WETH" || tokenOut.symbol === "ETH") {
         baseRate = 1 / ethPrice;
-      } else if (tokenOut.symbol === "cbETH") {
-        baseRate = 1 / (ethPrice * 1.07); // cbETH trades at ~7% premium
       } else {
         baseRate = 1;
       }
-    } else if (tokenIn.symbol === "WETH") {
+    } else if (tokenIn.symbol === "WETH" || tokenIn.symbol === "ETH") {
       baseRate = ethPrice;
     } else {
       baseRate = 1;
@@ -153,14 +151,12 @@ function calculateNetValue(
 ): string {
   const outputAmount = amountIn * rate * efficiency;
   
-  // Convert output to USD
+  // Convert output to USD (core tokens: USDC, ETH, WETH)
   let outputUSD: number;
-  if (tokenOutSymbol === "WETH") {
+  if (tokenOutSymbol === "WETH" || tokenOutSymbol === "ETH") {
     outputUSD = outputAmount * ethPrice;
-  } else if (tokenOutSymbol === "cbETH") {
-    outputUSD = outputAmount * ethPrice * 1.07;
   } else {
-    // Stablecoins
+    // USDC and other stablecoins
     outputUSD = outputAmount;
   }
   

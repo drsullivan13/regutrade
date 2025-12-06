@@ -57,10 +57,8 @@ export async function registerRoutes(
         let outputUSD: number;
         if (tokenOut.symbol === 'WETH' || tokenOut.symbol === 'ETH') {
           outputUSD = amountOutNum * ethPriceUSD;
-        } else if (tokenOut.symbol === 'cbETH') {
-          outputUSD = amountOutNum * ethPriceUSD * 1.05; // cbETH premium
         } else {
-          outputUSD = amountOutNum; // Stablecoins
+          outputUSD = amountOutNum; // Stablecoins (USDC)
         }
 
         // Parse gas cost (remove $ prefix)

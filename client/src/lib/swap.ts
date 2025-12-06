@@ -78,20 +78,11 @@ export interface SwapTransaction {
   value: bigint;
 }
 
-// Additional token addresses on Base L2
-const LINK_ADDRESS = "0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196".toLowerCase();
-const AAVE_ADDRESS = "0x63706e401c06ac8513145b7687a14804d17f814b".toLowerCase();
-
-// Get token decimals
+// Get token decimals for core tokens (USDC, ETH, WETH)
 export function getTokenDecimals(address: Address): number {
   const decimalsMap: Record<string, number> = {
     [TOKEN_ADDRESSES.USDC.toLowerCase()]: 6,
-    [TOKEN_ADDRESSES.USDbC.toLowerCase()]: 6,
     [TOKEN_ADDRESSES.WETH.toLowerCase()]: 18,
-    [TOKEN_ADDRESSES.DAI.toLowerCase()]: 18,
-    [TOKEN_ADDRESSES.cbETH.toLowerCase()]: 18,
-    [LINK_ADDRESS]: 18,
-    [AAVE_ADDRESS]: 18,
   };
   return decimalsMap[address.toLowerCase()] || 18;
 }
@@ -169,23 +160,16 @@ export function calculateMinOutput(
   return minOutput.toFixed(8);
 }
 
-// Get the appropriate fee tier based on token pair
+// Get the appropriate fee tier based on token pair (core tokens only: USDC, ETH, WETH)
 export function getFeeTier(tokenIn: Address, tokenOut: Address): number {
   const stablecoins = [
     TOKEN_ADDRESSES.USDC.toLowerCase(),
-    TOKEN_ADDRESSES.USDbC.toLowerCase(),
-    TOKEN_ADDRESSES.DAI.toLowerCase(),
   ];
   
   const isStablecoinIn = stablecoins.includes(tokenIn.toLowerCase());
   const isStablecoinOut = stablecoins.includes(tokenOut.toLowerCase());
   
-  // Stablecoin to stablecoin: 100 (0.01%)
-  if (isStablecoinIn && isStablecoinOut) {
-    return 100;
-  }
-  
-  // Stablecoin to ETH derivatives: 500 (0.05%) - most liquid
+  // USDC <-> ETH/WETH: 500 (0.05%) - most liquid tier
   if (isStablecoinIn || isStablecoinOut) {
     return 500;
   }

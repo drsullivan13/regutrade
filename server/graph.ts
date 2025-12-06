@@ -191,14 +191,11 @@ export async function getTokenPriceUSD(symbol: string): Promise<number> {
     return parseFloat(data.tokens[symbol].priceUSD);
   }
   
-  // Fallback prices
+  // Fallback prices for core tokens
   const fallbackPrices: Record<string, number> = {
     ETH: 1850,
     WETH: 1850,
     USDC: 1,
-    USDbC: 1,
-    DAI: 1,
-    cbETH: 1980,
   };
   
   return fallbackPrices[symbol] || 0;
