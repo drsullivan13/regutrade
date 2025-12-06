@@ -30,11 +30,18 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
   const tokens = tokenData?.tokens || {
     USDC: { symbol: "USDC", name: "USD Coin" },
     WETH: { symbol: "WETH", name: "Wrapped Ether" },
-    ETH: { symbol: "ETH", name: "Ether" },
   };
 
-  const sellTokens = ["USDC", "WETH", "ETH"];
-  const buyTokens = ["WETH", "ETH", "USDC"];
+  const sellTokens = ["USDC", "WETH"];
+  const buyTokens = ["WETH", "USDC"];
+
+  // Auto-switch buy token if it matches sell token
+  useEffect(() => {
+    if (buyToken === sellToken) {
+      // Switch to the other token
+      setBuyToken(sellToken === "USDC" ? "WETH" : "USDC");
+    }
+  }, [sellToken, buyToken]);
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
@@ -148,12 +155,6 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
           </div>
         </div>
 
-        {/* ETH/WETH explanation when relevant */}
-        {(buyToken === "ETH" || sellToken === "ETH") && (
-          <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-700 border border-blue-100">
-            <span className="font-medium">Note:</span> ETH swaps use WETH (Wrapped Ether) internally on Uniswap. WETH is 1:1 with ETH and can be unwrapped to native ETH at any time.
-          </div>
-        )}
 
         {/* Advanced Settings Toggle */}
         <div className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer hover:text-slate-900 transition-colors w-max">

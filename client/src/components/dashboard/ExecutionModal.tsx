@@ -63,7 +63,6 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
     const addresses: Record<string, Address> = {
       USDC: TOKEN_ADDRESSES.USDC,
       WETH: TOKEN_ADDRESSES.WETH,
-      ETH: TOKEN_ADDRESSES.WETH, // Native ETH uses WETH for Uniswap V3 swaps
     };
     
     const address = addresses[normalizedSymbol];

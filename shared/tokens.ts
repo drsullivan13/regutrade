@@ -12,14 +12,8 @@ export interface Token {
   logoURI?: string;
 }
 
-// Official Base L2 token addresses - Core tokens only
+// Official Base L2 token addresses - Core tokens only (USDC and WETH)
 export const TOKENS: Record<string, Token> = {
-  ETH: {
-    symbol: "ETH",
-    name: "Ether",
-    address: "0x0000000000000000000000000000000000000000", // Native ETH
-    decimals: 18,
-  },
   WETH: {
     symbol: "WETH",
     name: "Wrapped Ether",
@@ -43,7 +37,7 @@ export interface TokenPair {
 }
 
 export const TOKEN_PAIRS: TokenPair[] = [
-  // USDC to ETH/WETH pairs
+  // USDC <-> WETH pairs (the only valid Uniswap swap pairs)
   {
     id: "usdc-weth",
     from: TOKENS.USDC,
@@ -51,23 +45,10 @@ export const TOKEN_PAIRS: TokenPair[] = [
     label: "USDC -> WETH",
   },
   {
-    id: "usdc-eth",
-    from: TOKENS.USDC,
-    to: TOKENS.ETH,
-    label: "USDC -> ETH",
-  },
-  // ETH/WETH to USDC pairs
-  {
     id: "weth-usdc",
     from: TOKENS.WETH,
     to: TOKENS.USDC,
     label: "WETH -> USDC",
-  },
-  {
-    id: "eth-usdc",
-    from: TOKENS.ETH,
-    to: TOKENS.USDC,
-    label: "ETH -> USDC",
   },
 ];
 
