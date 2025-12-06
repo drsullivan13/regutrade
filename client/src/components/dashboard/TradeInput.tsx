@@ -168,7 +168,7 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
     <Card className="w-full shadow-sm border-slate-200">
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-medium text-slate-900">Trade Execution</CardTitle>
+          <CardTitle className="text-lg font-medium text-slate-900">Token Swap</CardTitle>
           <div className="flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
             <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></div>
             Base L2
@@ -178,10 +178,10 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-end">
           
-          {/* Sell Side */}
+          {/* From Side */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="sell-amount" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sell</Label>
+              <Label htmlFor="sell-amount" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">From</Label>
               {/* Token/USD Toggle */}
               <div className="flex items-center gap-1 bg-slate-100 rounded-md p-0.5" data-testid="toggle-input-mode">
                 <button
@@ -254,9 +254,9 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
             <ArrowDown className="md:hidden h-6 w-6" />
           </div>
 
-          {/* Buy Side */}
+          {/* To Side */}
           <div className="space-y-2">
-            <Label htmlFor="buy-token" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Buy</Label>
+            <Label htmlFor="buy-token" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">To</Label>
             <div className="flex gap-2">
               <Select value={buyToken} onValueChange={setBuyToken}>
                 <SelectTrigger className="flex-1 h-12 border-slate-300 font-medium bg-slate-50" data-testid="select-buy-token">
