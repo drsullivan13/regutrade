@@ -162,8 +162,8 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
           }))
         );
 
-        // Step 2: Compliance check (auto-pass)
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Step 2: Compliance check (instant in live mode to prevent popup blocker)
+        // No delay - browser popup blockers will block second popup if we wait too long
         setSteps(currentSteps => 
           currentSteps.map((step, i) => ({ 
             ...step, 
@@ -219,14 +219,20 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
         console.error("Transaction error:", txError);
         
         let errorMessage = "Transaction failed";
-        if (txError.message?.includes("rejected") || txError.message?.includes("denied") || txError.message?.includes("User rejected")) {
+        const errorDetails = txError.message || txError.details || JSON.stringify(txError);
+        
+        if (errorDetails.includes("rejected") || errorDetails.includes("denied") || errorDetails.includes("User rejected") || errorDetails.includes("cancelled")) {
           errorMessage = "Transaction rejected by user";
-        } else if (txError.message?.includes("insufficient") || txError.message?.includes("Insufficient")) {
+        } else if (errorDetails.includes("Pop up") || errorDetails.includes("popup") || errorDetails.includes("window failed")) {
+          errorMessage = "Wallet popup was blocked. Please allow popups for this site and try again.";
+        } else if (errorDetails.includes("insufficient") || errorDetails.includes("Insufficient")) {
           errorMessage = "Insufficient token balance";
-        } else if (txError.message?.includes("allowance")) {
+        } else if (errorDetails.includes("allowance")) {
           errorMessage = "Token approval failed";
-        } else if (txError.message?.includes("execution reverted")) {
+        } else if (errorDetails.includes("execution reverted")) {
           errorMessage = "Transaction reverted - check slippage or liquidity";
+        } else if (errorDetails.includes("timeout") || errorDetails.includes("Timeout")) {
+          errorMessage = "Transaction timed out - please try again";
         }
         
         setError(errorMessage);
