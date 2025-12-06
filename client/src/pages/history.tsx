@@ -156,8 +156,32 @@ export default function History() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono text-slate-600 tabular-nums">{parseFloat(trade.amountIn).toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-mono text-slate-900 font-medium tabular-nums">{trade.amountOut}</TableCell>
+                    <TableCell className="text-right font-mono text-slate-600 tabular-nums">
+                      {(() => {
+                        const amount = parseFloat(trade.amountIn);
+                        const symbol = trade.pairFrom;
+                        // Format based on token type and amount size
+                        if (isNaN(amount) || amount === 0) return `0 ${symbol}`;
+                        if (amount < 0.0001) return `${amount.toExponential(2)} ${symbol}`;
+                        if (amount < 1) return `${amount.toFixed(6)} ${symbol}`;
+                        if (amount >= 1000000) return `${(amount / 1000000).toFixed(2)}M ${symbol}`;
+                        if (amount >= 1000) return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${symbol}`;
+                        return `${amount.toFixed(4)} ${symbol}`;
+                      })()}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-slate-900 font-medium tabular-nums">
+                      {(() => {
+                        const amount = parseFloat(trade.amountOut);
+                        const symbol = trade.pairTo;
+                        // Format based on token type and amount size
+                        if (isNaN(amount) || amount === 0) return `0 ${symbol}`;
+                        if (amount < 0.0001) return `${amount.toExponential(2)} ${symbol}`;
+                        if (amount < 1) return `${amount.toFixed(6)} ${symbol}`;
+                        if (amount >= 1000000) return `${(amount / 1000000).toFixed(2)}M ${symbol}`;
+                        if (amount >= 1000) return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${symbol}`;
+                        return `${amount.toFixed(4)} ${symbol}`;
+                      })()}
+                    </TableCell>
                     <TableCell>
                       <Badge 
                         className={cn(
