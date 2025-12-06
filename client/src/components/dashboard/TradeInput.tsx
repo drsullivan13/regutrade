@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowRight, ArrowDown, Settings2, Loader2 } from "lucide-react";
+import { ArrowRight, ArrowDown, Settings2, Loader2, DollarSign, Coins } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+
+type InputMode = "token" | "usd";
 
 interface TradeInputProps {
   onAnalyze: (params: { pairFrom: string; pairTo: string; amountIn: string }) => Promise<void>;
@@ -14,8 +16,20 @@ interface TradeInputProps {
 export default function TradeInput({ onAnalyze }: TradeInputProps) {
   const [sellToken, setSellToken] = useState("USDC");
   const [buyToken, setBuyToken] = useState("WETH");
-  const [amount, setAmount] = useState("500000");
+  const [amount, setAmount] = useState("1000");
+  const [inputMode, setInputMode] = useState<InputMode>("usd");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Fetch current ETH price for USD/Token conversion
+  const { data: priceData } = useQuery({
+    queryKey: ["price"],
+    queryFn: async () => {
+      const response = await fetch("/api/price");
+      if (!response.ok) throw new Error("Failed to fetch price");
+      return response.json();
+    },
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
 
   // Fetch available token pairs from API
   const { data: tokenData } = useQuery({
@@ -35,32 +49,119 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
   const sellTokens = ["USDC", "WETH"];
   const buyTokens = ["WETH", "USDC"];
 
+  // Validate that a price is a finite positive number
+  const isValidPrice = (price: unknown): price is number => {
+    return typeof price === "number" && Number.isFinite(price) && price > 0;
+  };
+
+  // Check if price data is loaded and valid (needed for WETH conversions)
+  const isPriceLoaded = isValidPrice(priceData?.ethPriceUSD);
+
+  // Get token price in USD - returns null if price is not valid
+  const getTokenPriceUSD = (symbol: string): number | null => {
+    if (symbol === "USDC") return 1;
+    if (symbol === "WETH") {
+      const price = priceData?.ethPriceUSD;
+      if (!isValidPrice(price)) return null; // Price not loaded or invalid
+      return price;
+    }
+    return 1;
+  };
+
+  // Convert between token amount and USD value
+  const tokenToUSD = (tokenAmount: number, symbol: string): number | null => {
+    const price = getTokenPriceUSD(symbol);
+    if (price === null) return null;
+    return tokenAmount * price;
+  };
+
+  const usdToToken = (usdAmount: number, symbol: string): number | null => {
+    const price = getTokenPriceUSD(symbol);
+    if (price === null) return null;
+    return usdAmount / price;
+  };
+
+  // Check if we need price data and don't have it yet
+  const needsPriceData = inputMode === "usd" && sellToken === "WETH";
+  const priceReady = !needsPriceData || isPriceLoaded;
+
+  // Calculate the actual token amount to send to the API
+  const actualTokenAmount = useMemo((): number | null => {
+    const numAmount = parseFloat(amount) || 0;
+    if (inputMode === "usd") {
+      return usdToToken(numAmount, sellToken);
+    }
+    return numAmount;
+  }, [amount, inputMode, sellToken, priceData]);
+
+  // Calculate the equivalent value for display
+  const equivalentValue = useMemo(() => {
+    const numAmount = parseFloat(amount) || 0;
+    if (inputMode === "usd") {
+      // Show token equivalent
+      const tokenAmt = usdToToken(numAmount, sellToken);
+      if (tokenAmt === null) return "Loading price...";
+      if (tokenAmt < 0.0001) return `≈ ${tokenAmt.toExponential(2)} ${sellToken}`;
+      if (tokenAmt < 1) return `≈ ${tokenAmt.toFixed(6)} ${sellToken}`;
+      return `≈ ${tokenAmt.toFixed(4)} ${sellToken}`;
+    } else {
+      // Show USD equivalent
+      const usdAmt = tokenToUSD(numAmount, sellToken);
+      if (usdAmt === null) return "Loading price...";
+      if (usdAmt >= 1000000) return `≈ $${(usdAmt / 1000000).toFixed(2)}M`;
+      if (usdAmt >= 1000) return `≈ $${usdAmt.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+      return `≈ $${usdAmt.toFixed(2)}`;
+    }
+  }, [amount, inputMode, sellToken, priceData]);
+
   // Auto-switch buy token if it matches sell token
   useEffect(() => {
     if (buyToken === sellToken) {
-      // Switch to the other token
       setBuyToken(sellToken === "USDC" ? "WETH" : "USDC");
     }
   }, [sellToken, buyToken]);
 
   const handleAnalyze = async () => {
+    if (actualTokenAmount === null) return; // Price not ready
     setIsAnalyzing(true);
     try {
+      // Always send token amount to the API
       await onAnalyze({
         pairFrom: sellToken,
         pairTo: buyToken,
-        amountIn: amount,
+        amountIn: actualTokenAmount.toString(),
       });
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const formatBalance = (value: string) => {
-    const num = parseFloat(value);
-    if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
-    if (num >= 1000) return `$${(num / 1000).toFixed(0)}K`;
-    return `$${num.toFixed(2)}`;
+  // Check if analyze is disabled - ensure we have a valid finite token amount
+  const hasValidTokenAmount = actualTokenAmount !== null && Number.isFinite(actualTokenAmount) && actualTokenAmount > 0;
+  const isAnalyzeDisabled = isAnalyzing || !amount || parseFloat(amount) <= 0 || !hasValidTokenAmount;
+
+  const formatDisplayAmount = () => {
+    const numAmount = parseFloat(amount) || 0;
+    if (inputMode === "usd") {
+      if (numAmount >= 1000000) return `$${(numAmount / 1000000).toFixed(2)}M`;
+      if (numAmount >= 1000) return `$${numAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+      return `$${numAmount.toFixed(2)}`;
+    } else {
+      if (numAmount < 0.0001) return `${numAmount.toExponential(2)} ${sellToken}`;
+      if (numAmount < 1) return `${numAmount.toFixed(6)} ${sellToken}`;
+      return `${numAmount.toFixed(4)} ${sellToken}`;
+    }
+  };
+
+  const formatRouteDisplay = () => {
+    // Always show token amount for route display
+    const tokenAmt = actualTokenAmount;
+    if (tokenAmt === null) return "Loading...";
+    if (tokenAmt < 0.0001) return `${tokenAmt.toExponential(2)} ${sellToken}`;
+    if (tokenAmt < 1) return `${tokenAmt.toFixed(6)} ${sellToken}`;
+    if (tokenAmt >= 1000000) return `${(tokenAmt / 1000000).toFixed(2)}M ${sellToken}`;
+    if (tokenAmt >= 1000) return `${tokenAmt.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${sellToken}`;
+    return `${tokenAmt.toFixed(4)} ${sellToken}`;
   };
 
   return (
@@ -79,13 +180,44 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
           
           {/* Sell Side */}
           <div className="space-y-2">
-            <Label htmlFor="sell-amount" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sell</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="sell-amount" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sell</Label>
+              {/* Token/USD Toggle */}
+              <div className="flex items-center gap-1 bg-slate-100 rounded-md p-0.5" data-testid="toggle-input-mode">
+                <button
+                  type="button"
+                  onClick={() => setInputMode("usd")}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    inputMode === "usd" 
+                      ? "bg-white text-slate-900 shadow-sm" 
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                  data-testid="button-mode-usd"
+                >
+                  <DollarSign className="h-3 w-3" />
+                  USD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputMode("token")}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    inputMode === "token" 
+                      ? "bg-white text-slate-900 shadow-sm" 
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                  data-testid="button-mode-token"
+                >
+                  <Coins className="h-3 w-3" />
+                  Token
+                </button>
+              </div>
+            </div>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Input 
                   id="sell-amount" 
                   type="number" 
-                  placeholder="0.00" 
+                  placeholder={inputMode === "usd" ? "1000.00" : "0.5"} 
                   className="h-12 text-lg font-mono pl-4 border-slate-300 focus-visible:ring-primary"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
@@ -106,10 +238,10 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
               </Select>
             </div>
             <div className="flex justify-between text-xs text-slate-500 px-1">
-              <span>Amount: {formatBalance(amount)}</span>
+              <span>{equivalentValue}</span>
               <span 
                 className="text-primary cursor-pointer font-medium hover:underline" 
-                onClick={() => setAmount("1000000")}
+                onClick={() => setAmount(inputMode === "usd" ? "1000000" : "100")}
               >
                 Max
               </span>
@@ -150,7 +282,7 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
           <div className="flex items-center justify-between">
             <span>Analyzing routes for:</span>
             <span className="font-mono font-medium text-slate-900">
-              {formatBalance(amount)} {sellToken} → {buyToken}
+              {formatRouteDisplay()} → {buyToken}
             </span>
           </div>
         </div>
@@ -165,7 +297,7 @@ export default function TradeInput({ onAnalyze }: TradeInputProps) {
         <Button 
           className="w-full h-14 text-lg font-medium bg-primary hover:bg-blue-800 shadow-md transition-all active:scale-[0.99]"
           onClick={handleAnalyze}
-          disabled={isAnalyzing || !amount || parseFloat(amount) <= 0}
+          disabled={isAnalyzeDisabled}
           data-testid="button-analyze-routes"
         >
           {isAnalyzing ? (

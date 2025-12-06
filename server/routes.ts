@@ -101,6 +101,21 @@ export async function registerRoutes(
     }
   });
 
+  // Get current ETH price for USD/Token conversion
+  app.get("/api/price", async (req, res) => {
+    try {
+      const ethPrice = await getEthPriceUSD();
+      res.json({
+        ethPriceUSD: ethPrice,
+        usdcPriceUSD: 1, // Stablecoin
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("Price fetch error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Test endpoint for V3 quotes (debugging)
   app.get("/api/test-v3-quote", async (req, res) => {
     try {
