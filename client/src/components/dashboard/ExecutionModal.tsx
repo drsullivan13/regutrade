@@ -135,7 +135,9 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
       const tokenIn = getTokenAddress(analysisData.pairFrom);
       const tokenOut = getTokenAddress(analysisData.pairTo);
       const amountIn = analysisData.amountIn;
-      const expectedOutput = routeToExecute.outputRaw || routeToExecute.output.split(" ")[0];
+      // Use human-readable output value (not raw wei) for slippage calculation
+      // predictedOutput is the human-readable value like "0.000330..." 
+      const expectedOutput = routeToExecute.predictedOutput || routeToExecute.output.split(" ")[0];
       const minOutput = calculateMinOutput(expectedOutput, 100); // 1% slippage for safety
       const fee = getFeeTier(tokenIn, tokenOut);
 
