@@ -65,8 +65,8 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
       WETH: TOKEN_ADDRESSES.WETH,
       ETH: TOKEN_ADDRESSES.WETH, // Native ETH uses WETH for Uniswap V3 swaps
       DAI: TOKEN_ADDRESSES.DAI,
-      USDbC: TOKEN_ADDRESSES.USDbC,
-      cbETH: TOKEN_ADDRESSES.cbETH,
+      USDBC: TOKEN_ADDRESSES.USDbC, // Uppercase key to match normalization
+      CBETH: TOKEN_ADDRESSES.cbETH, // Uppercase key to match normalization
       LINK: "0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196" as Address,
       AAVE: "0x63706e401c06ac8513145b7687a14804d17f814b" as Address,
     };
