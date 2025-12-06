@@ -59,14 +59,24 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
   const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
   const getTokenAddress = (symbol: string): Address => {
+    const normalizedSymbol = symbol.toUpperCase();
     const addresses: Record<string, Address> = {
       USDC: TOKEN_ADDRESSES.USDC,
       WETH: TOKEN_ADDRESSES.WETH,
+      ETH: TOKEN_ADDRESSES.WETH, // Native ETH uses WETH for Uniswap V3 swaps
       DAI: TOKEN_ADDRESSES.DAI,
       USDbC: TOKEN_ADDRESSES.USDbC,
       cbETH: TOKEN_ADDRESSES.cbETH,
+      LINK: "0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196" as Address,
+      AAVE: "0x63706e401c06ac8513145b7687a14804d17f814b" as Address,
     };
-    return addresses[symbol.toUpperCase()] || TOKEN_ADDRESSES.USDC;
+    
+    const address = addresses[normalizedSymbol];
+    if (!address) {
+      console.error(`Unknown token symbol: ${symbol}, defaulting to WETH`);
+      return TOKEN_ADDRESSES.WETH;
+    }
+    return address;
   };
 
   // Reset state when modal closes

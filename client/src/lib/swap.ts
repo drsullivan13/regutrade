@@ -78,6 +78,10 @@ export interface SwapTransaction {
   value: bigint;
 }
 
+// Additional token addresses on Base L2
+const LINK_ADDRESS = "0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196".toLowerCase();
+const AAVE_ADDRESS = "0x63706e401c06ac8513145b7687a14804d17f814b".toLowerCase();
+
 // Get token decimals
 export function getTokenDecimals(address: Address): number {
   const decimalsMap: Record<string, number> = {
@@ -86,6 +90,8 @@ export function getTokenDecimals(address: Address): number {
     [TOKEN_ADDRESSES.WETH.toLowerCase()]: 18,
     [TOKEN_ADDRESSES.DAI.toLowerCase()]: 18,
     [TOKEN_ADDRESSES.cbETH.toLowerCase()]: 18,
+    [LINK_ADDRESS]: 18,
+    [AAVE_ADDRESS]: 18,
   };
   return decimalsMap[address.toLowerCase()] || 18;
 }
