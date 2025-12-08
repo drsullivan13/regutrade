@@ -219,15 +219,20 @@ export function sqrtPriceX96ToPrice(
 }
 
 /**
- * Calculate price impact using QuoterV2 response data (no extra RPC calls needed)
+ * Calculate price impact (slippage vs mid-price) using QuoterV2 response data
  * 
- * Uses the relationship between amountIn, amountOut, fee, and sqrtPriceX96After
- * to derive the pre-trade spot price and compare to execution price.
+ * Price impact = how much worse the execution price is compared to the 
+ * PRE-TRADE mid-market price. This is the cost of consuming liquidity.
  * 
- * For swaps within a single tick range:
- * - amountInNet = amountIn * (1e6 - fee) / 1e6
- * - The ratio R = amountOut/amountInNet relates to sqrt prices
- * - We can derive sqrtPriceBefore from sqrtPriceAfter and R
+ * Formula: priceImpact = (executionPrice - midPriceBefore) / midPriceBefore * 100
+ * 
+ * Result is typically NEGATIVE (cost to trader).
+ * Positive would mean price improvement (rare).
+ * 
+ * To derive midPriceBefore from QuoterV2 data:
+ * For swaps within a tick range, the relationship between amounts and prices is:
+ * R = amountOut / amountInNet = sqrtPriceBefore * sqrtPriceAfter (geometric mean)
+ * So: sqrtPriceBefore = R / sqrtPriceAfter
  */
 export function calculatePriceImpactFromQuote(
   amountIn: bigint,
@@ -239,59 +244,61 @@ export function calculatePriceImpactFromQuote(
   isToken0In: boolean,
   ticksCrossed: number
 ): { priceImpact: number; isReliable: boolean } {
-  // If multiple ticks crossed, the math becomes complex - mark as less reliable
+  // If multiple ticks crossed, the reconstruction is less accurate
   const isReliable = ticksCrossed <= 1;
   
-  // Calculate execution price (tokenOut per tokenIn, adjusted for decimals)
+  // Calculate amounts as numbers
   const amountInNum = Number(amountIn) / Math.pow(10, tokenInDecimals);
   const amountOutNum = Number(amountOut) / Math.pow(10, tokenOutDecimals);
+  
+  // Execution price (what trader actually gets: tokenOut per tokenIn)
   const executionPrice = amountOutNum / amountInNum;
   
-  // Calculate the fee-adjusted input
+  // Fee-adjusted input (amount after pool fee is deducted)
   const feeMultiplier = (1000000 - fee) / 1000000;
   const amountInNetNum = amountInNum * feeMultiplier;
   
-  // Derive spot price from sqrtPriceX96After
-  // sqrtPriceX96 = sqrt(price_token1/token0) * 2^96
+  // sqrtPriceAfter from QuoterV2 (convert from Q96 format)
   const sqrtPriceAfter = Number(sqrtPriceX96After) / Math.pow(2, 96);
-  const priceAfter = sqrtPriceAfter * sqrtPriceAfter;
   
-  // Adjust for decimals: price is token1/token0
-  const decimalAdjustment = Math.pow(10, tokenInDecimals - tokenOutDecimals);
+  // Derive sqrtPriceBefore using the geometric mean relationship
+  // For token0 -> token1: R = amountOut / amountInNet relates to sqrt prices
+  // amountOut = amountInNet * (sqrtPriceBefore * sqrtPriceAfter) for token0 in
+  // So: sqrtPriceBefore = (amountOut / amountInNet) / sqrtPriceAfter
+  let sqrtPriceBefore: number;
   
-  // For the spot price, we use the geometric relationship
-  // R (ratio) = amountOut / amountInNet encodes price information
-  const R = amountOutNum / amountInNetNum;
-  
-  // The spot price (before trade) can be approximated from the execution
-  // For small trades, execution price ≈ spot price * (1 - fee)
-  // So spot price ≈ execution price / (1 - fee/100)
-  // But more accurately, we use the after-price and work backwards
-  
-  // Convert sqrtPriceAfter to human-readable price
-  // If token0 is tokenIn, price is token1/token0 (what we get per input)
-  // If token1 is tokenIn, we need the inverse
-  let spotPriceAfterTrade: number;
   if (isToken0In) {
-    // Price is token1 per token0 = tokenOut per tokenIn
-    spotPriceAfterTrade = priceAfter * decimalAdjustment;
+    // Swapping token0 for token1
+    // Ratio in terms of the pool's native price orientation
+    const R = amountOutNum / amountInNetNum;
+    // Adjust for decimals: multiply by 10^(token0Decimals - token1Decimals)
+    const decimalAdj = Math.pow(10, tokenInDecimals - tokenOutDecimals);
+    sqrtPriceBefore = (R * decimalAdj) / sqrtPriceAfter;
   } else {
-    // Price is token0 per token1 = 1/priceAfter
-    spotPriceAfterTrade = (1 / priceAfter) * decimalAdjustment;
+    // Swapping token1 for token0
+    // The relationship inverts
+    const R = amountInNetNum / amountOutNum;
+    const decimalAdj = Math.pow(10, tokenOutDecimals - tokenInDecimals);
+    sqrtPriceBefore = (R * decimalAdj) / sqrtPriceAfter;
   }
   
-  // For price impact, compare execution price to the post-trade spot
-  // A negative impact means we got less than spot (moved price against us)
-  // For small trades, the difference is primarily the fee
-  // For large trades, there's additional slippage
+  // Convert sqrtPriceBefore to actual mid-market price (tokenOut per tokenIn)
+  const priceBefore = sqrtPriceBefore * sqrtPriceBefore;
   
-  // Theoretical output at spot = amountInNet * spotPrice
-  // Actual output = amountOut
-  // Price impact = (actual - theoretical) / theoretical * 100
+  // Get mid-price in trader's terms (tokenOut per tokenIn)
+  let midPriceBefore: number;
+  if (isToken0In) {
+    // Pool price is token1/token0, which is tokenOut/tokenIn
+    midPriceBefore = priceBefore * Math.pow(10, tokenInDecimals - tokenOutDecimals);
+  } else {
+    // Pool price is token1/token0, but we want token0/token1 = 1/price
+    midPriceBefore = (1 / priceBefore) * Math.pow(10, tokenInDecimals - tokenOutDecimals);
+  }
   
-  // Using post-trade spot as reference (conservative estimate)
-  const theoreticalOutput = amountInNetNum * spotPriceAfterTrade;
-  const priceImpact = ((amountOutNum - theoreticalOutput) / theoreticalOutput) * 100;
+  // Price impact = (execution - mid) / mid * 100
+  // Negative means execution is worse than mid (normal)
+  // Positive means execution is better than mid (rare, price improvement)
+  const priceImpact = ((executionPrice - midPriceBefore) / midPriceBefore) * 100;
   
   return { priceImpact, isReliable };
 }
