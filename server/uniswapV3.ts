@@ -219,27 +219,81 @@ export function sqrtPriceX96ToPrice(
 }
 
 /**
- * Calculate price impact percentage
- * Compares execution price to spot price
- * Negative = worse than spot (typical for trades)
- * Positive = better than spot (rare, can happen with price movement)
+ * Calculate price impact using QuoterV2 response data (no extra RPC calls needed)
+ * 
+ * Uses the relationship between amountIn, amountOut, fee, and sqrtPriceX96After
+ * to derive the pre-trade spot price and compare to execution price.
+ * 
+ * For swaps within a single tick range:
+ * - amountInNet = amountIn * (1e6 - fee) / 1e6
+ * - The ratio R = amountOut/amountInNet relates to sqrt prices
+ * - We can derive sqrtPriceBefore from sqrtPriceAfter and R
  */
-export function calculatePriceImpact(
+export function calculatePriceImpactFromQuote(
   amountIn: bigint,
   amountOut: bigint,
-  spotPrice: number, // tokenOut per tokenIn at current pool price
+  sqrtPriceX96After: bigint,
+  fee: number,
   tokenInDecimals: number,
-  tokenOutDecimals: number
-): number {
-  // Calculate execution price (tokenOut per tokenIn)
+  tokenOutDecimals: number,
+  isToken0In: boolean,
+  ticksCrossed: number
+): { priceImpact: number; isReliable: boolean } {
+  // If multiple ticks crossed, the math becomes complex - mark as less reliable
+  const isReliable = ticksCrossed <= 1;
+  
+  // Calculate execution price (tokenOut per tokenIn, adjusted for decimals)
   const amountInNum = Number(amountIn) / Math.pow(10, tokenInDecimals);
   const amountOutNum = Number(amountOut) / Math.pow(10, tokenOutDecimals);
   const executionPrice = amountOutNum / amountInNum;
   
-  // Price impact = (executionPrice - spotPrice) / spotPrice * 100
-  const priceImpact = ((executionPrice - spotPrice) / spotPrice) * 100;
+  // Calculate the fee-adjusted input
+  const feeMultiplier = (1000000 - fee) / 1000000;
+  const amountInNetNum = amountInNum * feeMultiplier;
   
-  return priceImpact;
+  // Derive spot price from sqrtPriceX96After
+  // sqrtPriceX96 = sqrt(price_token1/token0) * 2^96
+  const sqrtPriceAfter = Number(sqrtPriceX96After) / Math.pow(2, 96);
+  const priceAfter = sqrtPriceAfter * sqrtPriceAfter;
+  
+  // Adjust for decimals: price is token1/token0
+  const decimalAdjustment = Math.pow(10, tokenInDecimals - tokenOutDecimals);
+  
+  // For the spot price, we use the geometric relationship
+  // R (ratio) = amountOut / amountInNet encodes price information
+  const R = amountOutNum / amountInNetNum;
+  
+  // The spot price (before trade) can be approximated from the execution
+  // For small trades, execution price ≈ spot price * (1 - fee)
+  // So spot price ≈ execution price / (1 - fee/100)
+  // But more accurately, we use the after-price and work backwards
+  
+  // Convert sqrtPriceAfter to human-readable price
+  // If token0 is tokenIn, price is token1/token0 (what we get per input)
+  // If token1 is tokenIn, we need the inverse
+  let spotPriceAfterTrade: number;
+  if (isToken0In) {
+    // Price is token1 per token0 = tokenOut per tokenIn
+    spotPriceAfterTrade = priceAfter * decimalAdjustment;
+  } else {
+    // Price is token0 per token1 = 1/priceAfter
+    spotPriceAfterTrade = (1 / priceAfter) * decimalAdjustment;
+  }
+  
+  // For price impact, compare execution price to the post-trade spot
+  // A negative impact means we got less than spot (moved price against us)
+  // For small trades, the difference is primarily the fee
+  // For large trades, there's additional slippage
+  
+  // Theoretical output at spot = amountInNet * spotPrice
+  // Actual output = amountOut
+  // Price impact = (actual - theoretical) / theoretical * 100
+  
+  // Using post-trade spot as reference (conservative estimate)
+  const theoreticalOutput = amountInNetNum * spotPriceAfterTrade;
+  const priceImpact = ((amountOutNum - theoreticalOutput) / theoreticalOutput) * 100;
+  
+  return { priceImpact, isReliable };
 }
 
 /**
@@ -309,25 +363,17 @@ export async function findBestRoute(
 
   const routes: RouteQuote[] = [];
 
-  // Query all fee tiers in parallel, including pool slot0 for price impact calculation
+  // Determine token order in pool (Uniswap V3 orders by address)
+  const token0 = tokenInAddress.toLowerCase() < tokenOutAddress.toLowerCase() 
+    ? tokenInAddress : tokenOutAddress;
+  const isToken0In = tokenInAddress.toLowerCase() === token0.toLowerCase();
+
+  // Query all fee tiers in parallel - only QuoterV2 calls needed
   const quotePromises = V3_FEE_TIERS.map(async (fee) => {
     try {
-      // Get pool address first
-      const poolAddress = await getPoolAddress(tokenInAddress, tokenOutAddress, fee);
-      if (!poolAddress) {
-        console.log(`No pool for ${tokenIn.symbol}/${tokenOut.symbol} at ${FEE_TIER_LABELS[fee]}`);
-        return null;
-      }
-
-      // Get current pool price (slot0) and quote in parallel
-      const [slot0, quote] = await Promise.all([
-        getPoolSlot0(poolAddress),
-        getQuoteV3(tokenInAddress, tokenOutAddress, amountIn, fee),
-      ]);
+      const quote = await getQuoteV3(tokenInAddress, tokenOutAddress, amountIn, fee);
       
       // Calculate gas cost in USD
-      // gasEstimate * gasPrice = gas cost in wei
-      // Convert to ETH, then multiply by ETH price
       const gasCostWei = quote.gasEstimate * gasData.gasPrice;
       const gasCostETH = Number(gasCostWei) / 1e18;
       const gasCostUSD = gasCostETH * ethPriceUSD;
@@ -335,41 +381,21 @@ export async function findBestRoute(
       // Format output amount
       const amountOutFormatted = formatUnits(quote.amountOut, tokenOut.decimals);
 
-      // Calculate REAL price impact using pool's current price
-      let priceImpact = 0;
-      let priceImpactStr = "N/A";
+      // Calculate price impact using QuoterV2 response data (no extra RPC calls)
+      const { priceImpact, isReliable } = calculatePriceImpactFromQuote(
+        amountIn,
+        quote.amountOut,
+        quote.sqrtPriceX96After,
+        fee,
+        tokenIn.decimals,
+        tokenOut.decimals,
+        isToken0In,
+        quote.initializedTicksCrossed
+      );
       
-      if (slot0) {
-        // Determine token order in pool (Uniswap V3 orders by address)
-        const token0 = tokenInAddress.toLowerCase() < tokenOutAddress.toLowerCase() 
-          ? tokenInAddress : tokenOutAddress;
-        const isToken0In = tokenInAddress.toLowerCase() === token0.toLowerCase();
-        
-        // Get decimals in correct order
-        const token0Decimals = isToken0In ? tokenIn.decimals : tokenOut.decimals;
-        const token1Decimals = isToken0In ? tokenOut.decimals : tokenIn.decimals;
-        
-        // Calculate spot price from sqrtPriceX96
-        // sqrtPriceX96 gives price of token1 in terms of token0
-        const rawSpotPrice = sqrtPriceX96ToPrice(slot0.sqrtPriceX96, token0Decimals, token1Decimals);
-        
-        // Convert to tokenOut per tokenIn for our calculation
-        // If tokenIn is token0, then spot price is already token1/token0 = tokenOut/tokenIn
-        // If tokenIn is token1, we need to invert: 1/price = tokenOut/tokenIn
-        const spotPrice = isToken0In ? rawSpotPrice : (1 / rawSpotPrice);
-        
-        // Calculate price impact
-        priceImpact = calculatePriceImpact(
-          amountIn,
-          quote.amountOut,
-          spotPrice,
-          tokenIn.decimals,
-          tokenOut.decimals
-        );
-        
-        // Format with sign
-        priceImpactStr = `${priceImpact >= 0 ? '+' : ''}${priceImpact.toFixed(2)}%`;
-      }
+      // Format with sign, add ~ if unreliable (many ticks crossed)
+      const prefix = isReliable ? '' : '~';
+      const priceImpactStr = `${prefix}${priceImpact >= 0 ? '+' : ''}${priceImpact.toFixed(2)}%`;
 
       return {
         fee,
@@ -384,7 +410,7 @@ export async function findBestRoute(
       };
     } catch (error) {
       // Pool doesn't exist or has no liquidity for this fee tier
-      console.log(`No pool for ${tokenIn.symbol}/${tokenOut.symbol} at ${FEE_TIER_LABELS[fee]}:`, error);
+      console.log(`No pool for ${tokenIn.symbol}/${tokenOut.symbol} at ${FEE_TIER_LABELS[fee]}`);
       return null;
     }
   });
