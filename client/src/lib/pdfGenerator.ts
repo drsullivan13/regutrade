@@ -61,9 +61,21 @@ function calculateVariance(predicted: string | undefined, actual: string | undef
 export function generateComplianceReport(trade: TradeData): jsPDF {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
   const contentWidth = pageWidth - margin * 2;
+  const footerHeight = 30; // Reserve space for footer
   let y = 20;
+
+  // Helper to check if we need a new page
+  const checkPageBreak = (neededSpace: number) => {
+    if (y + neededSpace > pageHeight - footerHeight) {
+      doc.addPage();
+      y = 20;
+      return true;
+    }
+    return false;
+  };
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return new Date().toISOString();
@@ -205,6 +217,8 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
   addRow("Cost Efficiency", "Optimal");
 
   // Blockchain Verification - Enhanced for institutional auditors
+  // Check if we need a new page (this section needs ~120px of space)
+  checkPageBreak(120);
   addSection("BLOCKCHAIN VERIFICATION");
 
   const chainId = trade.chainId || "8453";
@@ -324,6 +338,7 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
   y += verifyBoxHeight + 5;
 
   // Compliance Statement
+  checkPageBreak(50);
   y += 5;
   doc.setFillColor(241, 245, 249);
   doc.roundedRect(margin, y, contentWidth, 40, 3, 3, "F");
@@ -345,28 +360,34 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
     doc.text(line, margin + 5, y + 18 + i * 5);
   });
 
-  // Footer with report generation timestamp
-  const footerY = doc.internal.pageSize.getHeight() - 20;
-  drawLine(footerY - 5);
+  // Footer with report generation timestamp - draw on all pages
+  const totalPages = doc.getNumberOfPages();
+  const documentId = `${trade.tradeId}-${Date.now().toString(36).toUpperCase()}`;
 
-  doc.setFontSize(8);
-  doc.setTextColor(148, 163, 184);
+  for (let page = 1; page <= totalPages; page++) {
+    doc.setPage(page);
 
-  // Left: Platform branding
-  doc.text("DeFi Trade Compliance Platform", margin, footerY);
+    const footerY = pageHeight - 20;
+    drawLine(footerY - 5);
 
-  // Center: Report ID
-  doc.text(`Report ID: ${trade.tradeId || "N/A"}`, pageWidth / 2, footerY, { align: "center" });
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
 
-  // Right: Page number
-  doc.text("Page 1 of 1", pageWidth - margin, footerY, { align: "right" });
+    // Left: Platform branding
+    doc.text("DeFi Trade Compliance Platform", margin, footerY);
 
-  // Second footer line: Generation timestamp
-  const footerY2 = footerY + 6;
-  doc.setFontSize(7);
-  doc.setTextColor(180, 180, 180);
-  const generatedTimestamp = new Date().toISOString();
-  doc.text(`Report Generated: ${formatDate()} | Document ID: ${trade.tradeId}-${Date.now().toString(36).toUpperCase()}`, margin, footerY2);
+    // Center: Report ID
+    doc.text(`Report ID: ${trade.tradeId || "N/A"}`, pageWidth / 2, footerY, { align: "center" });
+
+    // Right: Page number
+    doc.text(`Page ${page} of ${totalPages}`, pageWidth - margin, footerY, { align: "right" });
+
+    // Second footer line: Generation timestamp
+    const footerY2 = footerY + 6;
+    doc.setFontSize(7);
+    doc.setTextColor(180, 180, 180);
+    doc.text(`Report Generated: ${formatDate()} | Document ID: ${documentId}`, margin, footerY2);
+  }
 
   return doc;
 }
