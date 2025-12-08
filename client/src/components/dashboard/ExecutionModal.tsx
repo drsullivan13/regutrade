@@ -44,6 +44,14 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [blockNumber, setBlockNumber] = useState<bigint | undefined>();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [awaitingSwapClick, setAwaitingSwapClick] = useState(false);
+  const [pendingSwapData, setPendingSwapData] = useState<{
+    tokenIn: Address;
+    tokenOut: Address;
+    amountIn: string;
+    minOutput: string;
+    fee: number;
+  } | null>(null);
   
   const [steps, setSteps] = useState<Step[]>([
     { id: "approval", label: "Token Approval", description: "Approve token spending", status: "pending" },
@@ -168,58 +176,25 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
           }))
         );
 
-        // Step 2: Compliance check (instant in live mode to prevent popup blocker)
-        // No delay - browser popup blockers will block second popup if we wait too long
+        // Step 2: Compliance check complete
         setSteps(currentSteps => 
           currentSteps.map((step, i) => ({ 
             ...step, 
-            status: i <= 1 ? "completed" : i === 2 ? "active" : "pending" 
+            status: i <= 1 ? "completed" : "pending" 
           }))
         );
 
-        // Step 3: Execute swap
-        const swapTx = buildSwapTransaction({
+        // PAUSE HERE: Store swap data and wait for user click
+        // This prevents browser popup blocker from blocking the swap transaction
+        setPendingSwapData({
           tokenIn,
           tokenOut,
           amountIn,
-          amountOutMin: minOutput,
-          recipient: address,
+          minOutput,
           fee,
         });
-
-        const swapHash = await sendTransactionAsync({
-          to: swapTx.to,
-          data: swapTx.data,
-          value: swapTx.value,
-        });
-
-        setTxHash(swapHash);
-        
-        setSteps(currentSteps => 
-          currentSteps.map((step, i) => ({ 
-            ...step, 
-            status: i <= 2 ? "completed" : "active" 
-          }))
-        );
-
-        // Step 4: Wait for swap confirmation
-        const swapReceipt = await publicClient.waitForTransactionReceipt({
-          hash: swapHash,
-          confirmations: 1,
-        });
-
-        if (swapReceipt.status !== "success") {
-          throw new Error("Swap transaction failed");
-        }
-
-        setBlockNumber(swapReceipt.blockNumber);
-        
-        setSteps(currentSteps => 
-          currentSteps.map(step => ({ ...step, status: "completed" }))
-        );
-
-        // Create trade record with real on-chain data
-        await createTradeRecord(swapHash, swapReceipt.blockNumber);
+        setAwaitingSwapClick(true);
+        setIsProcessing(false);
 
       } catch (txError: any) {
         console.error("Transaction error:", txError);
@@ -257,6 +232,92 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
       setIsProcessing(false);
     }
   }, [address, analysisData, routeToExecute, sendTransactionAsync, publicClient]);
+
+  // Continue swap execution after user clicks (prevents popup blocker)
+  const continueSwapExecution = useCallback(async () => {
+    if (!address || !pendingSwapData || !publicClient) return;
+
+    setAwaitingSwapClick(false);
+    setIsProcessing(true);
+
+    try {
+      // Step 3: Execute swap
+      setSteps(currentSteps => 
+        currentSteps.map((step, i) => ({ 
+          ...step, 
+          status: i <= 1 ? "completed" : i === 2 ? "active" : "pending" 
+        }))
+      );
+
+      const swapTx = buildSwapTransaction({
+        tokenIn: pendingSwapData.tokenIn,
+        tokenOut: pendingSwapData.tokenOut,
+        amountIn: pendingSwapData.amountIn,
+        amountOutMin: pendingSwapData.minOutput,
+        recipient: address,
+        fee: pendingSwapData.fee,
+      });
+
+      const swapHash = await sendTransactionAsync({
+        to: swapTx.to,
+        data: swapTx.data,
+        value: swapTx.value,
+      });
+
+      setTxHash(swapHash);
+      
+      setSteps(currentSteps => 
+        currentSteps.map((step, i) => ({ 
+          ...step, 
+          status: i <= 2 ? "completed" : "active" 
+        }))
+      );
+
+      // Step 4: Wait for swap confirmation
+      const swapReceipt = await publicClient.waitForTransactionReceipt({
+        hash: swapHash,
+        confirmations: 1,
+      });
+
+      if (swapReceipt.status !== "success") {
+        throw new Error("Swap transaction failed");
+      }
+
+      setBlockNumber(swapReceipt.blockNumber);
+      
+      setSteps(currentSteps => 
+        currentSteps.map(step => ({ ...step, status: "completed" }))
+      );
+
+      // Create trade record with real on-chain data
+      await createTradeRecord(swapHash, swapReceipt.blockNumber);
+      setPendingSwapData(null);
+
+    } catch (txError: any) {
+      console.error("Swap transaction error:", txError);
+      
+      let errorMessage = "Swap transaction failed";
+      const errorDetails = txError.message || txError.details || JSON.stringify(txError);
+      
+      if (errorDetails.includes("rejected") || errorDetails.includes("denied") || errorDetails.includes("User rejected")) {
+        errorMessage = "Transaction rejected by user";
+      } else if (errorDetails.includes("insufficient") || errorDetails.includes("Insufficient")) {
+        errorMessage = "Insufficient token balance";
+      } else if (errorDetails.includes("execution reverted")) {
+        errorMessage = "Transaction reverted - check slippage or liquidity";
+      }
+      
+      setError(errorMessage);
+      setSteps(currentSteps => 
+        currentSteps.map((step) => ({ 
+          ...step, 
+          status: step.status === "active" ? "error" : step.status 
+        }))
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [address, pendingSwapData, publicClient, sendTransactionAsync]);
 
   const createTradeRecord = async (transactionHash: `0x${string}`, confirmedBlockNumber?: bigint) => {
     if (!analysisData || !routeToExecute) return;
@@ -495,6 +556,11 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
                   <CheckCircle2 className="h-6 w-6 text-green-400" />
                   Trade Executed Successfully
                 </>
+              ) : awaitingSwapClick ? (
+                <>
+                  <CheckCircle2 className="h-6 w-6 text-green-400" />
+                  Approval Complete
+                </>
               ) : (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
@@ -503,13 +569,15 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
               )}
             </DialogTitle>
             <DialogDescription className={cn(
-              hasError ? "text-red-300" : "text-slate-400"
+              hasError ? "text-red-300" : awaitingSwapClick ? "text-green-300" : "text-slate-400"
             )}>
               {hasError 
                 ? error || "Transaction failed" 
                 : isComplete 
                   ? "Your trade has been confirmed on Base L2" 
-                  : "Please confirm transactions in your wallet"}
+                  : awaitingSwapClick
+                    ? "Click 'Continue to Swap' below to execute the trade"
+                    : "Please confirm transactions in your wallet"}
             </DialogDescription>
             <div className="mt-2 space-y-1">
               {isComplete && tradeId && (
@@ -593,6 +661,8 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
                   onClick={() => {
                     setError(null);
                     setExecutionStarted(false);
+                    setAwaitingSwapClick(false);
+                    setPendingSwapData(null);
                     setSteps(steps.map(s => ({ ...s, status: "pending" })));
                   }} 
                   className="bg-primary hover:bg-blue-800"
@@ -607,6 +677,15 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
                 data-testid="button-view-analysis"
               >
                 View Post-Trade Analysis
+              </Button>
+            ) : awaitingSwapClick ? (
+              <Button 
+                onClick={continueSwapExecution}
+                className="bg-primary hover:bg-blue-800 w-full sm:w-auto gap-2"
+                data-testid="button-continue-swap"
+              >
+                <Wallet className="h-4 w-4" />
+                Continue to Swap
               </Button>
             ) : (
               <Button disabled variant="outline" className="w-full sm:w-auto gap-2">

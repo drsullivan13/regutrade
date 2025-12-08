@@ -38,8 +38,8 @@ const swapRouter02Abi = [
   },
 ] as const;
 
-// ERC20 approve ABI
-const erc20ApproveAbi = [
+// ERC20 ABI for approve and allowance
+export const erc20Abi = [
   {
     name: "approve",
     type: "function",
@@ -61,6 +61,9 @@ const erc20ApproveAbi = [
     outputs: [{ name: "", type: "uint256" }],
   },
 ] as const;
+
+// Legacy alias for backward compatibility
+const erc20ApproveAbi = erc20Abi;
 
 export interface SwapParams {
   tokenIn: Address;
