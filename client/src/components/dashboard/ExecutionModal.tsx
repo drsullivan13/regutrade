@@ -280,13 +280,12 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
     const amountOut = parseFloat(actualOutput);
     const effectiveRate = amountOut > 0 ? (amountIn / amountOut).toFixed(2) : "0";
     
-    // Calculate quality score based on price impact (clamp between 0-100)
-    // Remove % sign and handle negative values properly
-    const priceImpactStr = routeToExecute.priceImpact?.replace('%', '').replace('-', '') || '0';
-    const priceImpactValue = parseFloat(priceImpactStr);
-    // Lower price impact = higher quality score
-    // 0% impact = 100 score, 1% impact = 90 score, etc.
-    const rawScore = 100 - (priceImpactValue * 10);
+    // Calculate quality score based on pool fee (clamp between 0-100)
+    // Lower fee = higher quality score
+    const poolFeeStr = routeToExecute.poolFee?.replace('%', '') || '0.05';
+    const poolFeeValue = parseFloat(poolFeeStr);
+    // 0.01% fee = 99.9 score, 0.05% fee = 99.5 score, 0.3% fee = 97 score, 1% fee = 90 score
+    const rawScore = 100 - (poolFeeValue * 10);
     const qualityScore = Math.min(100, Math.max(0, rawScore)).toFixed(2);
     
     const qualityScoreNum = parseFloat(qualityScore);
@@ -309,7 +308,7 @@ export default function ExecutionModal({ isOpen, onOpenChange, analysisData, sel
       executionQuality,
       qualityScore,
       predictedOutput: predictedOutput,
-      priceImpact: routeToExecute.priceImpact,
+      priceImpact: routeToExecute.poolFee || "0.05%",
       transactionHash: transactionHash,
       walletAddress: walletAddr,
       network: "Base L2",
