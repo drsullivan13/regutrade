@@ -13,7 +13,7 @@ export interface Route {
   gas: string;
   gasRaw?: string;
   netValue: string;
-  priceImpact: string;
+  poolFee: string;
   isBest: boolean;
   tags: string[];
   routeString?: string;
@@ -57,12 +57,12 @@ export default function RouteComparison({ routes, onExecute, pairFrom, pairTo }:
               </TableHead>
               <TableHead className="text-right text-xs font-bold uppercase tracking-wider text-slate-500">
                 <div className="flex items-center justify-end gap-1">
-                  Price Impact
+                  Pool Fee
                   <Tooltip>
                     <TooltipTrigger>
                       <Info className="h-3 w-3 text-slate-400" />
                     </TooltipTrigger>
-                    <TooltipContent>Impact on market price from this trade</TooltipContent>
+                    <TooltipContent>Fee charged by the liquidity pool for this swap</TooltipContent>
                   </Tooltip>
                 </div>
               </TableHead>
@@ -124,11 +124,8 @@ export default function RouteComparison({ routes, onExecute, pairFrom, pairTo }:
                 <TableCell className="text-right font-mono text-base font-medium text-slate-900 tabular-nums" data-testid={`text-output-${route.id}`}>
                   {route.output}
                 </TableCell>
-                <TableCell className={cn(
-                  "text-right font-mono text-sm tabular-nums",
-                  route.priceImpact.startsWith("-") ? "text-amber-600" : "text-slate-500"
-                )}>
-                  {route.priceImpact}
+                <TableCell className="text-right font-mono text-sm text-slate-600 tabular-nums">
+                  {route.poolFee}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm text-slate-500 tabular-nums">
                   {route.gas}

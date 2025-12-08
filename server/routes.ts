@@ -73,7 +73,7 @@ export async function registerRoutes(
           gas: route.gasEstimateUSD,
           gasRaw: route.gasEstimate.toString(),
           netValue: `$${netValue.toFixed(2)}`,
-          priceImpact: route.priceImpact,
+          poolFee: route.poolFee,
           isBest: route.isBest,
           tags: route.isBest ? ["Best Execution", "Live Quote"] : ["Live Quote"],
           routeString: route.route,

@@ -110,7 +110,7 @@ export interface RouteQuote {
   amountOutFormatted: string;
   gasEstimate: bigint;
   gasEstimateUSD: string;
-  priceImpact: string;
+  poolFee: string;
   route: string;
   isBest: boolean;
 }
@@ -370,11 +370,6 @@ export async function findBestRoute(
 
   const routes: RouteQuote[] = [];
 
-  // Determine token order in pool (Uniswap V3 orders by address)
-  const token0 = tokenInAddress.toLowerCase() < tokenOutAddress.toLowerCase() 
-    ? tokenInAddress : tokenOutAddress;
-  const isToken0In = tokenInAddress.toLowerCase() === token0.toLowerCase();
-
   // Query all fee tiers in parallel - only QuoterV2 calls needed
   const quotePromises = V3_FEE_TIERS.map(async (fee) => {
     try {
@@ -388,22 +383,6 @@ export async function findBestRoute(
       // Format output amount
       const amountOutFormatted = formatUnits(quote.amountOut, tokenOut.decimals);
 
-      // Calculate price impact using QuoterV2 response data (no extra RPC calls)
-      const { priceImpact, isReliable } = calculatePriceImpactFromQuote(
-        amountIn,
-        quote.amountOut,
-        quote.sqrtPriceX96After,
-        fee,
-        tokenIn.decimals,
-        tokenOut.decimals,
-        isToken0In,
-        quote.initializedTicksCrossed
-      );
-      
-      // Format with sign, add ~ if unreliable (many ticks crossed)
-      const prefix = isReliable ? '' : '~';
-      const priceImpactStr = `${prefix}${priceImpact >= 0 ? '+' : ''}${priceImpact.toFixed(2)}%`;
-
       return {
         fee,
         feeLabel: FEE_TIER_LABELS[fee],
@@ -411,7 +390,7 @@ export async function findBestRoute(
         amountOutFormatted,
         gasEstimate: quote.gasEstimate,
         gasEstimateUSD: `$${gasCostUSD.toFixed(4)}`,
-        priceImpact: priceImpactStr,
+        poolFee: FEE_TIER_LABELS[fee],
         route: `${tokenIn.symbol} -> [${FEE_TIER_LABELS[fee]}] -> ${tokenOut.symbol}`,
         isBest: false,
       };
