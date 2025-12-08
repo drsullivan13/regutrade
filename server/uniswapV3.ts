@@ -23,6 +23,40 @@ export const FEE_TIER_LABELS: Record<number, string> = {
   10000: '1%',
 };
 
+// Factory ABI to get pool address
+const FACTORY_ABI = [
+  {
+    inputs: [
+      { name: 'tokenA', type: 'address' },
+      { name: 'tokenB', type: 'address' },
+      { name: 'fee', type: 'uint24' },
+    ],
+    name: 'getPool',
+    outputs: [{ name: 'pool', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
+// Pool ABI to get slot0 (current price)
+const POOL_ABI = [
+  {
+    inputs: [],
+    name: 'slot0',
+    outputs: [
+      { name: 'sqrtPriceX96', type: 'uint160' },
+      { name: 'tick', type: 'int24' },
+      { name: 'observationIndex', type: 'uint16' },
+      { name: 'observationCardinality', type: 'uint16' },
+      { name: 'observationCardinalityNext', type: 'uint16' },
+      { name: 'feeProtocol', type: 'uint8' },
+      { name: 'unlocked', type: 'bool' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
 // QuoterV2 ABI for quoteExactInputSingle
 const QUOTER_V2_ABI = [
   {
@@ -113,6 +147,102 @@ export async function getQuoteV3(
 }
 
 /**
+ * Get pool address from factory
+ */
+export async function getPoolAddress(
+  tokenA: string,
+  tokenB: string,
+  fee: FeeTier
+): Promise<string | null> {
+  try {
+    const poolAddress = await publicClient.readContract({
+      address: V3_CONTRACTS.FACTORY as `0x${string}`,
+      abi: FACTORY_ABI,
+      functionName: 'getPool',
+      args: [tokenA as `0x${string}`, tokenB as `0x${string}`, fee],
+    });
+    
+    // Check if pool exists (address is not zero)
+    if (poolAddress === '0x0000000000000000000000000000000000000000') {
+      return null;
+    }
+    return poolAddress;
+  } catch (error) {
+    console.log(`Failed to get pool for fee tier ${fee}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Get current sqrtPriceX96 from pool slot0
+ */
+export async function getPoolSlot0(
+  poolAddress: string
+): Promise<{ sqrtPriceX96: bigint; tick: number } | null> {
+  try {
+    const slot0 = await publicClient.readContract({
+      address: poolAddress as `0x${string}`,
+      abi: POOL_ABI,
+      functionName: 'slot0',
+    });
+    
+    return {
+      sqrtPriceX96: slot0[0],
+      tick: slot0[1],
+    };
+  } catch (error) {
+    console.log(`Failed to get slot0 for pool ${poolAddress}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Convert sqrtPriceX96 to actual price ratio
+ * sqrtPriceX96 = sqrt(price) * 2^96
+ * price = (sqrtPriceX96 / 2^96)^2
+ * This gives price of token1 in terms of token0
+ */
+export function sqrtPriceX96ToPrice(
+  sqrtPriceX96: bigint,
+  token0Decimals: number,
+  token1Decimals: number
+): number {
+  // Convert to number for calculation (may lose precision for very large values)
+  const sqrtPrice = Number(sqrtPriceX96) / Math.pow(2, 96);
+  const price = sqrtPrice * sqrtPrice;
+  
+  // Adjust for decimal differences
+  // price is token1/token0, so we adjust for decimals
+  const decimalAdjustment = Math.pow(10, token0Decimals - token1Decimals);
+  
+  return price * decimalAdjustment;
+}
+
+/**
+ * Calculate price impact percentage
+ * Compares execution price to spot price
+ * Negative = worse than spot (typical for trades)
+ * Positive = better than spot (rare, can happen with price movement)
+ */
+export function calculatePriceImpact(
+  amountIn: bigint,
+  amountOut: bigint,
+  spotPrice: number, // tokenOut per tokenIn at current pool price
+  tokenInDecimals: number,
+  tokenOutDecimals: number
+): number {
+  // Calculate execution price (tokenOut per tokenIn)
+  const amountInNum = Number(amountIn) / Math.pow(10, tokenInDecimals);
+  const amountOutNum = Number(amountOut) / Math.pow(10, tokenOutDecimals);
+  const executionPrice = amountOutNum / amountInNum;
+  
+  // Price impact = (executionPrice - spotPrice) / spotPrice * 100
+  const priceImpact = ((executionPrice - spotPrice) / spotPrice) * 100;
+  
+  return priceImpact;
+}
+
+/**
  * Get the current gas price on Base L2
  */
 export async function getBaseGasPrice(): Promise<{ gasPrice: bigint; gasPriceGwei: string }> {
@@ -179,10 +309,21 @@ export async function findBestRoute(
 
   const routes: RouteQuote[] = [];
 
-  // Query all fee tiers in parallel
+  // Query all fee tiers in parallel, including pool slot0 for price impact calculation
   const quotePromises = V3_FEE_TIERS.map(async (fee) => {
     try {
-      const quote = await getQuoteV3(tokenInAddress, tokenOutAddress, amountIn, fee);
+      // Get pool address first
+      const poolAddress = await getPoolAddress(tokenInAddress, tokenOutAddress, fee);
+      if (!poolAddress) {
+        console.log(`No pool for ${tokenIn.symbol}/${tokenOut.symbol} at ${FEE_TIER_LABELS[fee]}`);
+        return null;
+      }
+
+      // Get current pool price (slot0) and quote in parallel
+      const [slot0, quote] = await Promise.all([
+        getPoolSlot0(poolAddress),
+        getQuoteV3(tokenInAddress, tokenOutAddress, amountIn, fee),
+      ]);
       
       // Calculate gas cost in USD
       // gasEstimate * gasPrice = gas cost in wei
@@ -194,10 +335,41 @@ export async function findBestRoute(
       // Format output amount
       const amountOutFormatted = formatUnits(quote.amountOut, tokenOut.decimals);
 
-      // Calculate price impact based on fee tier (actual price impact is small for liquid pairs)
-      // Fee tier is the primary "impact" on the trade - higher fee = more slippage
-      const feePercent = fee / 10000; // Convert basis points to percent (100 = 0.01%, 500 = 0.05%)
-      const priceImpact = -feePercent; // Price impact is negative (you lose value to fees)
+      // Calculate REAL price impact using pool's current price
+      let priceImpact = 0;
+      let priceImpactStr = "N/A";
+      
+      if (slot0) {
+        // Determine token order in pool (Uniswap V3 orders by address)
+        const token0 = tokenInAddress.toLowerCase() < tokenOutAddress.toLowerCase() 
+          ? tokenInAddress : tokenOutAddress;
+        const isToken0In = tokenInAddress.toLowerCase() === token0.toLowerCase();
+        
+        // Get decimals in correct order
+        const token0Decimals = isToken0In ? tokenIn.decimals : tokenOut.decimals;
+        const token1Decimals = isToken0In ? tokenOut.decimals : tokenIn.decimals;
+        
+        // Calculate spot price from sqrtPriceX96
+        // sqrtPriceX96 gives price of token1 in terms of token0
+        const rawSpotPrice = sqrtPriceX96ToPrice(slot0.sqrtPriceX96, token0Decimals, token1Decimals);
+        
+        // Convert to tokenOut per tokenIn for our calculation
+        // If tokenIn is token0, then spot price is already token1/token0 = tokenOut/tokenIn
+        // If tokenIn is token1, we need to invert: 1/price = tokenOut/tokenIn
+        const spotPrice = isToken0In ? rawSpotPrice : (1 / rawSpotPrice);
+        
+        // Calculate price impact
+        priceImpact = calculatePriceImpact(
+          amountIn,
+          quote.amountOut,
+          spotPrice,
+          tokenIn.decimals,
+          tokenOut.decimals
+        );
+        
+        // Format with sign
+        priceImpactStr = `${priceImpact >= 0 ? '+' : ''}${priceImpact.toFixed(2)}%`;
+      }
 
       return {
         fee,
@@ -206,13 +378,13 @@ export async function findBestRoute(
         amountOutFormatted,
         gasEstimate: quote.gasEstimate,
         gasEstimateUSD: `$${gasCostUSD.toFixed(4)}`,
-        priceImpact: `${priceImpact.toFixed(2)}%`,
+        priceImpact: priceImpactStr,
         route: `${tokenIn.symbol} -> [${FEE_TIER_LABELS[fee]}] -> ${tokenOut.symbol}`,
         isBest: false,
       };
     } catch (error) {
       // Pool doesn't exist or has no liquidity for this fee tier
-      console.log(`No pool for ${tokenIn.symbol}/${tokenOut.symbol} at ${FEE_TIER_LABELS[fee]}`);
+      console.log(`No pool for ${tokenIn.symbol}/${tokenOut.symbol} at ${FEE_TIER_LABELS[fee]}:`, error);
       return null;
     }
   });
