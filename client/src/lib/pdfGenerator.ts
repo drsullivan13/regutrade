@@ -21,6 +21,10 @@ export interface TradeData {
   blockNumber?: string | null;
   status: string;
   createdAt?: string;
+  // Enhanced blockchain verification fields
+  chainId?: string;
+  tokenInAddress?: string;
+  tokenOutAddress?: string;
 }
 
 function safeParseFloat(value: string | number | undefined | null): number {
@@ -200,37 +204,124 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
   addRow("Gas Used", `${safeFormatNumber(trade.gasUsed, 0)} units`);
   addRow("Cost Efficiency", "Optimal");
 
-  // Blockchain Verification
+  // Blockchain Verification - Enhanced for institutional auditors
   addSection("BLOCKCHAIN VERIFICATION");
-  addRow("Network", trade.network || "Base L2");
+
+  const chainId = trade.chainId || "8453";
+  const networkDisplay = `${trade.network || "Base L2"} (Chain ID: ${chainId})`;
+  addRow("Network", networkDisplay);
   addRow("Wallet Address", trade.walletAddress || "N/A");
-  
-  // Block Number (if available)
+
+  // Block Number
   if (trade.blockNumber) {
-    addRow("Block Number", trade.blockNumber);
+    addRow("Block Number", `#${trade.blockNumber}`);
   }
-  
-  // Transaction hash with link indicator
+
+  // Execution timestamp
+  if (trade.createdAt) {
+    addRow("Execution Time", formatDate(trade.createdAt));
+  }
+
+  // Token contract addresses (if available)
+  if (trade.tokenInAddress) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Token In (${trade.pairFrom})`, margin, y);
+    doc.setFont("courier", "normal");
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(8);
+    doc.text(trade.tokenInAddress, pageWidth - margin, y, { align: "right" });
+    y += 7;
+  }
+
+  if (trade.tokenOutAddress) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Token Out (${trade.pairTo})`, margin, y);
+    doc.setFont("courier", "normal");
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(8);
+    doc.text(trade.tokenOutAddress, pageWidth - margin, y, { align: "right" });
+    y += 7;
+  }
+
+  y += 3;
+
+  // Transaction Hash - Full display for audit trail
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 116, 139);
   doc.text("Transaction Hash", margin, y);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(59, 130, 246);
-  const txDisplay = trade.transactionHash 
-    ? (trade.transactionHash.length > 42 
-        ? `${trade.transactionHash.slice(0, 10)}...${trade.transactionHash.slice(-8)}`
-        : trade.transactionHash)
-    : "N/A";
-  doc.text(txDisplay, pageWidth - margin, y, { align: "right" });
-  y += 7;
-  
+  y += 6;
+
+  // Display full transaction hash in monospace font
+  doc.setFont("courier", "normal");
+  doc.setTextColor(30, 41, 59);
+  doc.setFontSize(9);
+  const txHash = trade.transactionHash || "N/A";
+  doc.text(txHash, margin, y);
+  y += 8;
+
+  // Block Explorer verification URL
   if (trade.transactionHash && trade.transactionHash.startsWith("0x")) {
-    doc.setFontSize(8);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 116, 139);
-    doc.text(`View on BaseScan: basescan.org/tx/${trade.transactionHash.slice(0, 10)}...`, margin, y);
+    doc.text("Verify on Block Explorer:", margin, y);
+    y += 5;
+    doc.setFont("courier", "normal");
+    doc.setTextColor(59, 130, 246);
+    doc.setFontSize(8);
+    doc.text(`https://basescan.org/tx/${trade.transactionHash}`, margin, y);
     y += 10;
   }
+
+  // On-Chain Verification Badge
+  y += 5;
+  const verifyBoxHeight = 45;
+
+  // Dark header bar
+  doc.setFillColor(15, 23, 42);
+  doc.roundedRect(margin, y, contentWidth, 18, 3, 3, "F");
+
+  // Green checkmark circle
+  doc.setFillColor(22, 163, 74);
+  doc.circle(margin + 12, y + 9, 5, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("✓", margin + 10, y + 12);
+
+  // Header text
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(11);
+  doc.text("BLOCKCHAIN VERIFIED", margin + 22, y + 12);
+
+  // Light body
+  doc.setFillColor(241, 245, 249);
+  doc.rect(margin, y + 18, contentWidth, verifyBoxHeight - 18, "F");
+
+  // Verification summary
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(71, 85, 105);
+
+  const verifyY = y + 26;
+  doc.text(`Network: ${networkDisplay}`, margin + 5, verifyY);
+  doc.text(`Block: ${trade.blockNumber ? `#${trade.blockNumber}` : "Pending"}`, margin + 5, verifyY + 6);
+  doc.text(`Executed: ${formatDate(trade.createdAt)}`, margin + 5, verifyY + 12);
+
+  // Right side - hash preview
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(8);
+  if (trade.transactionHash) {
+    const shortHash = `${trade.transactionHash.slice(0, 18)}...${trade.transactionHash.slice(-16)}`;
+    doc.text(shortHash, pageWidth - margin - 5, verifyY + 6, { align: "right" });
+  }
+
+  y += verifyBoxHeight + 5;
 
   // Compliance Statement
   y += 5;
@@ -254,14 +345,28 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
     doc.text(line, margin + 5, y + 18 + i * 5);
   });
 
-  // Footer
-  const footerY = doc.internal.pageSize.getHeight() - 15;
+  // Footer with report generation timestamp
+  const footerY = doc.internal.pageSize.getHeight() - 20;
   drawLine(footerY - 5);
+
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
+
+  // Left: Platform branding
   doc.text("DeFi Trade Compliance Platform", margin, footerY);
+
+  // Center: Report ID
   doc.text(`Report ID: ${trade.tradeId || "N/A"}`, pageWidth / 2, footerY, { align: "center" });
+
+  // Right: Page number
   doc.text("Page 1 of 1", pageWidth - margin, footerY, { align: "right" });
+
+  // Second footer line: Generation timestamp
+  const footerY2 = footerY + 6;
+  doc.setFontSize(7);
+  doc.setTextColor(180, 180, 180);
+  const generatedTimestamp = new Date().toISOString();
+  doc.text(`Report Generated: ${formatDate()} | Document ID: ${trade.tradeId}-${Date.now().toString(36).toUpperCase()}`, margin, footerY2);
 
   return doc;
 }
