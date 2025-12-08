@@ -64,7 +64,7 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
   const contentWidth = pageWidth - margin * 2;
-  const footerHeight = 30; // Reserve space for footer
+  const footerHeight = 35; // Reserve space for footer (2 lines)
   let y = 20;
 
   // Helper to check if we need a new page
@@ -188,6 +188,7 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
   y += 35;
 
   // Trade Details
+  checkPageBreak(60);
   addSection("TRADE DETAILS");
   addRow("Trade Pair", `${trade.pairFrom || "N/A"} -> ${trade.pairTo || "N/A"}`);
   addRow("Trade Type", (trade.type || "buy").toUpperCase());
@@ -196,6 +197,7 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
   addRow("Effective Rate", `${safeFormatNumber(trade.effectiveRate)} ${trade.pairFrom || ""}/${trade.pairTo || ""}`);
 
   // Execution Analysis
+  checkPageBreak(60);
   addSection("EXECUTION ANALYSIS");
   
   const variance = calculateVariance(trade.predictedOutput, trade.amountOut);
@@ -211,6 +213,7 @@ export function generateComplianceReport(trade: TradeData): jsPDF {
   addRow("Routing Strategy", cleanRoute);
 
   // Cost Analysis
+  checkPageBreak(50);
   addSection("COST ANALYSIS");
   addRow("Gas Cost (USD)", trade.gasCost || "$0.00");
   addRow("Gas Used", `${safeFormatNumber(trade.gasUsed, 0)} units`);
